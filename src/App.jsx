@@ -2446,7 +2446,7 @@ export default function App() {
       if (document.visibilityState === "visible") {
         syncSharedData();
       }
-    }, 3000);
+    }, 1500);
 
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibilityChange);

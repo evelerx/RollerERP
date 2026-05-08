@@ -22,7 +22,7 @@ const createEmptyState = () => ({
   stockLogs: [],
   clients: [],
   notifications: [],
-  _erpMeta: { updatedAt: 0 },
+  _erpMeta: { localUpdatedAt: 0, serverUpdatedAt: 0, dirty: false },
 });
 
 let saveTimer = null;
@@ -50,16 +50,13 @@ const writeLocalBackup = (data) => {
   }
 };
 
-const getUpdatedAt = (data) => {
-  const value = Number(data?._erpMeta?.updatedAt || 0);
+const getLocalUpdatedAt = (data) => {
+  const value = Number(data?._erpMeta?.localUpdatedAt || 0);
   return Number.isFinite(value) ? value : 0;
 };
 
-const getRemoteUpdatedAt = (remoteRow, payload) => {
-  const payloadUpdatedAt = getUpdatedAt(payload);
-  const rowUpdatedAt = Date.parse(remoteRow?.updated_at || "") || 0;
-  return Math.max(payloadUpdatedAt, rowUpdatedAt);
-};
+const getServerUpdatedAt = (data) => Number(data?._erpMeta?.serverUpdatedAt || 0) || 0;
+const isDirty = (data) => Boolean(data?._erpMeta?.dirty);
 
 const stampErpData = (data, timestamp = Date.now()) => {
   if (!data || typeof data !== "object") {
@@ -69,9 +66,24 @@ const stampErpData = (data, timestamp = Date.now()) => {
   const nextTimestamp = Number.isFinite(Number(timestamp)) ? Number(timestamp) : Date.now();
   data._erpMeta = {
     ...(data._erpMeta || {}),
-    updatedAt: nextTimestamp,
+    localUpdatedAt: nextTimestamp,
+    serverUpdatedAt: getServerUpdatedAt(data),
+    dirty: true,
   };
   return data;
+};
+
+const applyServerMeta = (data, serverUpdatedAt) => {
+  const stampedServerTime = Number(Date.parse(serverUpdatedAt || "")) || Date.now();
+  return {
+    ...data,
+    _erpMeta: {
+      ...(data?._erpMeta || {}),
+      localUpdatedAt: Math.max(getLocalUpdatedAt(data), stampedServerTime),
+      serverUpdatedAt: stampedServerTime,
+      dirty: false,
+    },
+  };
 };
 
 const fetchWithTimeout = async (url, options = {}) => {
@@ -127,7 +139,9 @@ const sanitizeErpData = (data, buildSeed) => {
     notifications: Array.isArray(cleaned.notifications) ? cleaned.notifications : fallback.notifications,
     _erpMeta: {
       ...(cleaned._erpMeta && typeof cleaned._erpMeta === "object" ? cleaned._erpMeta : {}),
-      updatedAt: getUpdatedAt(cleaned),
+      localUpdatedAt: getLocalUpdatedAt(cleaned),
+      serverUpdatedAt: getServerUpdatedAt(cleaned),
+      dirty: isDirty(cleaned),
     },
   };
 };
@@ -158,6 +172,8 @@ const upsertRemoteState = async (data) => {
   if (!response.ok) {
     throw new Error(`Failed to save ERP state: ${response.status}`);
   }
+
+  return response.json();
 };
 
 const queueRemoteRetry = () => {
@@ -170,7 +186,9 @@ const queueRemoteRetry = () => {
 
     try {
       const payload = pendingRemotePayload;
-      await upsertRemoteState(payload);
+      const remoteRow = await upsertRemoteState(payload);
+      const syncedPayload = applyServerMeta(payload, remoteRow?.updated_at);
+      writeLocalBackup(syncedPayload);
       pendingRemotePayload = null;
       retryDelayMs = 1000;
     } catch (error) {
@@ -186,28 +204,33 @@ export const loadErpData = async (buildSeed) => {
 
   try {
     const remoteData = await fetchRemoteState();
-    if (remoteData?.payload) {
-      const sanitizedRemote = sanitizeErpData(remoteData.payload, buildSeed);
-      const localUpdatedAt = getUpdatedAt(localData);
-      const remoteUpdatedAt = getRemoteUpdatedAt(remoteData, sanitizedRemote);
+    if (isDirty(localData)) {
+      const remoteRow = await upsertRemoteState(localData);
+      const syncedLocal = applyServerMeta(localData, remoteRow?.updated_at);
+      writeLocalBackup(syncedLocal);
+      pendingRemotePayload = null;
+      return syncedLocal;
+    }
 
-      if (localUpdatedAt > remoteUpdatedAt) {
-        writeLocalBackup(localData);
-        await upsertRemoteState(localData);
-        return localData;
-      }
+    if (remoteData?.payload) {
+      const sanitizedRemote = applyServerMeta(
+        sanitizeErpData(remoteData.payload, buildSeed),
+        remoteData.updated_at
+      );
 
       writeLocalBackup(sanitizedRemote);
       if (JSON.stringify(sanitizedRemote) !== JSON.stringify(remoteData.payload)) {
-        await upsertRemoteState(sanitizedRemote);
+        const normalizedRow = await upsertRemoteState(sanitizedRemote);
+        return applyServerMeta(sanitizedRemote, normalizedRow?.updated_at);
       }
       return sanitizedRemote;
     }
 
     const initialData = localData;
-    await upsertRemoteState(initialData);
-    writeLocalBackup(initialData);
-    return initialData;
+    const remoteRow = await upsertRemoteState(initialData);
+    const syncedInitial = applyServerMeta(initialData, remoteRow?.updated_at);
+    writeLocalBackup(syncedInitial);
+    return syncedInitial;
   } catch (error) {
     console.error("Backend load failed, using local backup instead.", error);
     return localData;
@@ -221,7 +244,9 @@ export const saveErpData = (data) => {
   pendingRemotePayload = stampedData;
 
   upsertRemoteState(stampedData)
-    .then(() => {
+    .then((remoteRow) => {
+      const syncedPayload = applyServerMeta(stampedData, remoteRow?.updated_at);
+      writeLocalBackup(syncedPayload);
       if (pendingRemotePayload === stampedData) {
         pendingRemotePayload = null;
       }
