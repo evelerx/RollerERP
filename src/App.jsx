@@ -1449,7 +1449,8 @@ const SizeManager = memo(({data,setData})=>{
 
   const save=()=>{
     setData(prev=>{
-      let sizes=editing?prev.sizes.map(s=>s.code===editing?{...form,price:Number(form.price),cost:Number(form.cost)}:s):[...prev.sizes,{...form,price:Number(form.price),cost:Number(form.cost)}];
+      const normalizedSize = {...form,price:Number(form.price),cost:Number(form.cost),active:form.active!==false};
+      let sizes=editing?prev.sizes.map(s=>s.code===editing?normalizedSize:s):[...prev.sizes,normalizedSize];
       const u={...prev,sizes};saveData(u);return u;
     });
     setModal(false);
@@ -2079,7 +2080,11 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
   const [customForm,setCustomForm]=useState({diameter:"",length:"",qty:10,note:""});
   const isMobile = useIsMobile();
 
-  const activeSizes=useMemo(()=>(data.sizes||[]).filter(s=>s.active!==false),[data.sizes]);
+  const activeSizes=useMemo(()=>{
+    const sizes = data.sizes || [];
+    const visible = sizes.filter(s=>s.active!==false);
+    return visible.length > 0 ? visible : sizes;
+  },[data.sizes]);
   const normalizedClientPhone = useMemo(()=>normalizePhone(clientPhone),[clientPhone]);
   const clientOrds=useMemo(()=>{
     if (normalizedClientPhone) {
