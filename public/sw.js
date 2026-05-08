@@ -1,4 +1,4 @@
-const CACHE_NAME = "roller-erp-shell-v2";
+const CACHE_NAME = "roller-erp-shell-v3";
 const CORE_ASSETS = ["/", "/manifest.webmanifest", "/favicon.svg", "/app-icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -13,6 +13,12 @@ self.addEventListener("activate", (event) => {
       Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
     ).then(() => self.clients.claim())
   );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("fetch", (event) => {

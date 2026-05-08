@@ -72,7 +72,7 @@ const sanitizeUiText = (value) => {
 // ── AUTH (obfuscated — do not expose plaintext) ────────────────────────────
 const ADMIN_PASSWORD = "123ERP";
 const LEGACY_PASSWORDS = ["1234"];
-const EMPLOYEE_PIN = "123ERP";
+const EMPLOYEE_PIN = "123321";
 
 // Encoded verification — never stored as plaintext
 const _vk = [77,84,73,122,82,86,74,81]; // encoded segments
@@ -664,7 +664,7 @@ const LoginScreen = ({onLogin, canInstall=false, onInstall, showIosHint=false, i
       if(verifyAdmin(pass)){ onLogin("admin"); }
       else { setError("Incorrect password."); setPass(""); }
     } else if(step==="employee"){
-      if([EMPLOYEE_PIN, ...LEGACY_PASSWORDS].includes(String(pass ?? "").trim())){ onLogin("employee"); }
+      if(String(pass ?? "").trim()===EMPLOYEE_PIN){ onLogin("employee"); }
       else { setError("Incorrect PIN."); setPass(""); }
     } else if(step==="client"){
       onLogin("client");
@@ -741,7 +741,7 @@ const LoginScreen = ({onLogin, canInstall=false, onInstall, showIosHint=false, i
         {error&&<div style={{color:T.red,fontSize:12,marginBottom:12,textAlign:"center"}}>{error}</div>}
         <Btn onClick={attempt} disabled={!pass} style={{width:"100%"}}>Enter</Btn>
         <div style={{marginTop:16,fontSize:11,color:T.textMuted,textAlign:"center"}}>
-          {step==="admin"?"Default admin password: 123ERP":"Default PIN: 123ERP"}
+          {step==="admin"?"Default admin password: 123ERP":"Default PIN: 123321"}
         </div>
       </div>
     </div>
