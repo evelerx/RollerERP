@@ -1010,6 +1010,25 @@ const OrderBook = memo(({data,setData,role})=>{
     setPayModal(null);
   },[setData,payModal,payAmt]);
 
+  const deleteOrder=useCallback((id)=>{
+    const confirmed = typeof window === "undefined" ? true : window.confirm("Delete this order permanently?");
+    if (!confirmed) return;
+
+    setData(prev=>{
+      const updated = {
+        ...prev,
+        orders: prev.orders.filter(o=>o.id!==id),
+        notifications: (prev.notifications || []).filter(n=>n.orderId!==id),
+        stockLogs: (prev.stockLogs || []).filter(log=>log.orderId!==id),
+      };
+      saveData(updated);
+      return updated;
+    });
+
+    setDetail(d=>d?.id===id?null:d);
+    setPayModal(current=>current===id?null:current);
+  },[setData]);
+
   const addOrder=useCallback(()=>{
     const totalValue=form.items.reduce((s,i)=>s+i.qty*i.unitPrice,0);
     const orderStatus = isAdmin ? "pending" : "awaiting-approval";
@@ -1069,7 +1088,12 @@ const OrderBook = memo(({data,setData,role})=>{
       ) : <span style={{fontSize:11,color:T.textMuted}}>-</span>,
     }]:[]),
     {key:"_a",        label:"",           render:(_,r)=><Btn small onClick={()=>setDetail({...r})}>View</Btn>},
-  ],[isAdmin, updateStatus]);
+    ...(isAdmin?[{
+      key:"_delete",
+      label:"",
+      render:(_,r)=><Btn small variant="ghost" onClick={()=>deleteOrder(r.id)}>Delete</Btn>,
+    }]:[]),
+  ],[deleteOrder, isAdmin, updateStatus]);
 
   const tabs=["all","awaiting-approval","pending","in-production","ready-for-delivery","delivered","cancelled"];
 
@@ -1152,6 +1176,11 @@ const OrderBook = memo(({data,setData,role})=>{
                     <Btn small variant="blue">Call Client</Btn>
                   </a>
                 )}
+              </div>
+            )}
+            {isAdmin && (
+              <div style={{display:"flex",justifyContent:"flex-end"}}>
+                <Btn small variant="ghost" onClick={()=>deleteOrder(detail.id)}>Delete Order</Btn>
               </div>
             )}
             {detail.notes&&<div style={{fontSize:13,color:T.textSec,fontStyle:"italic"}}>"{detail.notes}"</div>}
