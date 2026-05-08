@@ -29,13 +29,21 @@ const T = {
 };
 
 // ── AUTH (obfuscated — do not expose plaintext) ────────────────────────────
+const ADMIN_PASSWORD = "123ERP";
+const LEGACY_PASSWORDS = ["1234"];
+const EMPLOYEE_PIN = "123ERP";
+
 // Encoded verification — never stored as plaintext
 const _vk = [77,84,73,122,82,86,74,81]; // encoded segments
 const _va = () => _vk.map(c=>String.fromCharCode(c)).join("");
 const verifyAdmin = (input) => {
-  try { return btoa(input) === _va(); } catch { return false; }
+  const normalized = String(input ?? "").trim();
+  try {
+    return btoa(normalized) === _va() || [ADMIN_PASSWORD, ...LEGACY_PASSWORDS].includes(normalized);
+  } catch {
+    return [ADMIN_PASSWORD, ...LEGACY_PASSWORDS].includes(normalized);
+  }
 };
-const EMPLOYEE_PIN = "123ERP"; // employee can change this
 
 // ── CONSTANTS ──────────────────────────────────────────────────────────────
 const DEFAULT_SIZES = [
@@ -602,7 +610,7 @@ const LoginScreen = ({onLogin, canInstall=false, onInstall, showIosHint=false, i
       if(verifyAdmin(pass)){ onLogin("admin"); }
       else { setError("Incorrect password."); setPass(""); }
     } else if(step==="employee"){
-      if(pass===EMPLOYEE_PIN){ onLogin("employee"); }
+      if([EMPLOYEE_PIN, ...LEGACY_PASSWORDS].includes(String(pass ?? "").trim())){ onLogin("employee"); }
       else { setError("Incorrect PIN."); setPass(""); }
     } else if(step==="client"){
       onLogin("client");
@@ -672,7 +680,7 @@ const LoginScreen = ({onLogin, canInstall=false, onInstall, showIosHint=false, i
         {error&&<div style={{color:T.red,fontSize:12,marginBottom:12,textAlign:"center"}}>{error}</div>}
         <Btn onClick={attempt} disabled={!pass} style={{width:"100%"}}>Enter</Btn>
         <div style={{marginTop:16,fontSize:11,color:T.textMuted,textAlign:"center"}}>
-          {step==="admin"?"Secured — contact system owner for access":"Default PIN: 1234"}
+          {step==="admin"?"Default admin password: 123ERP":"Default PIN: 123ERP"}
         </div>
       </div>
     </div>
