@@ -2,6 +2,10 @@ import { ensureSchema, getPool, syncNormalizedTables } from "../_lib/db.js";
 
 export default async function handler(req, res) {
   const pool = getPool();
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
 
   if (!pool) {
     return res.status(503).json({ error: "DATABASE_URL is not configured." });

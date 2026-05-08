@@ -49,9 +49,20 @@ const writeLocalBackup = (data) => {
 const fetchWithTimeout = async (url, options = {}) => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REMOTE_TIMEOUT_MS);
+  const mergedHeaders = {
+    Accept: "application/json",
+    "Cache-Control": "no-store",
+    Pragma: "no-cache",
+    ...(options.headers || {}),
+  };
 
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await fetch(url, {
+      ...options,
+      headers: mergedHeaders,
+      cache: "no-store",
+      signal: controller.signal,
+    });
   } finally {
     clearTimeout(timeoutId);
   }
@@ -121,7 +132,7 @@ export const loadErpData = async (buildSeed) => {
     if (remoteData?.payload) {
       const sanitizedRemote = sanitizeErpData(remoteData.payload, buildSeed);
       writeLocalBackup(sanitizedRemote);
-      if (sanitizedRemote !== remoteData.payload) {
+      if (JSON.stringify(sanitizedRemote) !== JSON.stringify(remoteData.payload)) {
         await upsertRemoteState(sanitizedRemote);
       }
       return sanitizedRemote;
@@ -149,5 +160,5 @@ export const saveErpData = (data) => {
     upsertRemoteState(data).catch((error) => {
       console.error("Backend save failed, kept local backup.", error);
     });
-  }, 300);
+  }, 50);
 };
