@@ -8,6 +8,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { loadErpData, saveErpData } from "./lib/erpStorage";
 
+import { SpeedInsights } from "@vercel/speed-insights/react";
 // ── FONTS ──────────────────────────────────────────────────────────────────
 (() => {
   if (document.getElementById("erp-f")) return;
@@ -2207,6 +2208,7 @@ export default function App() {
         showIosHint={isIos && !isStandalone}
         isInstalled={isInstalled}
       />
+      <SpeedInsights />
     </>
   );
 }
