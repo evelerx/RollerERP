@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { loadErpData, saveErpData } from "./lib/erpStorage";
+import { getLastLocalWriteAt, loadErpData, saveErpData } from "./lib/erpStorage";
 
 // ── FONTS ──────────────────────────────────────────────────────────────────
 (() => {
@@ -53,6 +53,13 @@ const sanitizeUiText = (value) => {
     .replaceAll("â€¦", "...")
     .replaceAll("Ã—", "x")
     .replaceAll("âš ", "!")
+    .replaceAll("âœ…", "OK")
+    .replaceAll("âœ•", "x")
+    .replaceAll("âˆ’", "-")
+    .replaceAll("âŠ•", "+")
+    .replaceAll("â–¶", "Start")
+    .replaceAll("ðŸ›’", "")
+    .replaceAll("ðŸ”", "")
     .replaceAll("â€˜", "'")
     .replaceAll("â€™", "'")
     .replaceAll("â€œ", "\"")
@@ -111,10 +118,12 @@ const RM_TYPES = [
 ];
 
 const STATUS = {
+  "awaiting-approval":  {label:"Awaiting Approval", color:"#f97316",bg:"rgba(249,115,22,.12)"},
   "pending":            {label:"Pending",           color:"#f59e0b",bg:"rgba(245,158,11,.12)"},
   "in-production":      {label:"In Production",     color:"#3b82f6",bg:"rgba(59,130,246,.12)"},
   "ready-for-delivery": {label:"Ready for Delivery",color:"#a78bfa",bg:"rgba(167,139,250,.12)"},
   "delivered":          {label:"Delivered",         color:"#22c55e",bg:"rgba(34,197,94,.12)"},
+  "rejected":           {label:"Rejected",          color:"#ef4444",bg:"rgba(239,68,68,.12)"},
   "cancelled":          {label:"Cancelled",         color:"#ef4444",bg:"rgba(239,68,68,.12)"},
 };
 
@@ -172,7 +181,8 @@ const buildSeed = () => ({
     {id:"C006",name:"Kumar Mining Pvt.",phone:"9654321098",email:"kumar@mining.com",address:"Chhattisgarh",gst:"22ABCDE2345K6Z0"},
     {id:"C007",name:"Agarwal Infra",phone:"9432109876",email:"agarwal@infra.com",address:"Haryana",gst:"06ABCDE6789L7Z1"},
     {id:"C008",name:"Verma Stone Works",phone:"9543210987",email:"verma@stone.com",address:"Bihar",gst:"10ABCDE0123M8Z2"},
-  ]
+  ],
+  notifications: [],
 });
 
 // ── STORAGE (Supabase + local fallback) ───────────────────────────
@@ -184,6 +194,8 @@ const INR    = (n) => "₹" + new Intl.NumberFormat("en-IN").format(Math.round(n
 const NUM    = (n) => new Intl.NumberFormat("en-IN").format(n||0);
 const today  = () => new Date().toISOString().split("T")[0];
 const genId  = (p) => `${p}-${Date.now().toString(36).toUpperCase().slice(-6)}`;
+const NOTIF_ADMIN = "admin";
+const NOTIF_EMPLOYEE = "employee";
 const getSz  = (sizes, code) => (sizes||[]).find(s=>s.code===code) || {};
 const getRMT = (id) => RM_TYPES.find(r=>r.id===id) || {};
 const isDue  = (d) => d && d < today() ? true : false;
@@ -195,6 +207,21 @@ const daysLeft = (d) => {
 
 const calcOrderCost = (sizes, items) =>
   (items||[]).reduce((s,i)=>s+(getSz(sizes,i.size).cost||0)*(i.qty||0),0);
+
+const createNotification = ({ role, title, message, orderId }) => ({
+  id: genId("NTF"),
+  role,
+  title,
+  message,
+  orderId: orderId || null,
+  createdAt: new Date().toISOString(),
+  read: false,
+});
+
+const appendNotifications = (state, notifications) => ({
+  ...state,
+  notifications: [...(state.notifications || []), ...notifications],
+});
 
 const getMonthlyStats = (sizes, orders) => {
   const map = {};
@@ -449,7 +476,8 @@ const isValidImportPayload = (payload) =>
   payload.inventory &&
   typeof payload.inventory === "object" &&
   Array.isArray(payload.stockLogs) &&
-  Array.isArray(payload.clients);
+  Array.isArray(payload.clients) &&
+  Array.isArray(payload.notifications || []);
 
 // ── PERFORMANCE: debounce hook ─────────────────────────────────────────────
 const useDebounce = (val, ms=300) => {
@@ -503,6 +531,67 @@ const Card = memo(({children,style={},onClick})=>(
 const Badge = memo(({status})=>{
   const s=STATUS[status]||{label:status,color:T.textSec,bg:"rgba(255,255,255,.06)"};
   return <span style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20,color:s.color,background:s.bg,letterSpacing:.5,textTransform:"uppercase"}}>{s.label}</span>;
+});
+
+const NotificationPanel = memo(({ role, data, setData, title }) => {
+  const notifications = (data.notifications || [])
+    .filter((item) => item.role === role && !item.read)
+    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
+    .slice(0, 6);
+
+  if (notifications.length === 0) return null;
+
+  const markRead = (id) => {
+    setData((prev) => {
+      const updated = {
+        ...prev,
+        notifications: (prev.notifications || []).map((item) =>
+          item.id === id ? { ...item, read: true } : item
+        ),
+      };
+      saveData(updated);
+      return updated;
+    });
+  };
+
+  const markAllRead = () => {
+    setData((prev) => {
+      const updated = {
+        ...prev,
+        notifications: (prev.notifications || []).map((item) =>
+          item.role === role ? { ...item, read: true } : item
+        ),
+      };
+      saveData(updated);
+      return updated;
+    });
+  };
+
+  return (
+    <Card style={{ marginBottom: 16, borderColor: `${T.amber}44` }}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:12}}>
+        <div>
+          <div className="raj" style={{fontSize:16,fontWeight:700,color:T.text}}>{title}</div>
+          <div style={{fontSize:12,color:T.textSec}}>{notifications.length} unread update{notifications.length>1?"s":""}</div>
+        </div>
+        <Btn small variant="ghost" onClick={markAllRead}>Mark all read</Btn>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {notifications.map((item) => (
+          <div key={item.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"flex-start"}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:T.text}}>{item.title}</div>
+                <div style={{fontSize:12,color:T.textSec,marginTop:4}}>{item.message}</div>
+                {item.orderId && <div className="mono" style={{fontSize:11,color:T.amber,marginTop:6}}>{item.orderId}</div>}
+              </div>
+              <Btn small variant="ghost" onClick={() => markRead(item.id)}>Dismiss</Btn>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
 });
 
 const KPI = memo(({label,value,sub,accent})=>(
@@ -880,8 +969,33 @@ const OrderBook = memo(({data,setData,role})=>{
 
   const updateStatus=useCallback((id,status)=>{
     setData(prev=>{
-      const u={...prev,orders:prev.orders.map(o=>o.id===id?{...o,status,...(status==="delivered"?{deliveryDate:today()}:{})}:o)};
-      saveData(u);return u;
+      const currentOrder = prev.orders.find(o=>o.id===id);
+      const orders = prev.orders.map(o=>o.id===id?{...o,status,...(status==="delivered"?{deliveryDate:today()}:{})}:o);
+      let updated = { ...prev, orders };
+
+      if (currentOrder?.status === "awaiting-approval" && status === "pending") {
+        updated = appendNotifications(updated, [
+          createNotification({
+            role: NOTIF_EMPLOYEE,
+            title: "Order approved for production",
+            message: `${currentOrder.clientName}'s order is approved and moved to the production queue.`,
+            orderId: currentOrder.id,
+          }),
+        ]);
+      }
+
+      if (currentOrder?.status === "awaiting-approval" && status === "cancelled") {
+        updated = appendNotifications(updated, [
+          createNotification({
+            role: NOTIF_ADMIN,
+            title: "Order cancelled",
+            message: `${currentOrder.clientName}'s order was cancelled before production approval.`,
+            orderId: currentOrder.id,
+          }),
+        ]);
+      }
+
+      saveData(updated);return updated;
     });
     setDetail(d=>d?.id===id?{...d,status}:d);
   },[setData]);
@@ -897,10 +1011,30 @@ const OrderBook = memo(({data,setData,role})=>{
 
   const addOrder=useCallback(()=>{
     const totalValue=form.items.reduce((s,i)=>s+i.qty*i.unitPrice,0);
-    const order={id:genId("ORD"),...form,status:"pending",orderDate:today(),deliveryDate:null,totalValue,paidAmount:Number(form.paidAmount)||0};
-    setData(prev=>{const u={...prev,orders:[...prev.orders,order]};saveData(u);return u;});
+    const orderStatus = isAdmin ? "pending" : "awaiting-approval";
+    const order={id:genId("ORD"),...form,status:orderStatus,orderDate:today(),deliveryDate:null,totalValue,paidAmount:Number(form.paidAmount)||0};
+    setData(prev=>{
+      let updated={...prev,orders:[...prev.orders,order]};
+      if (!isAdmin) {
+        updated = appendNotifications(updated, [
+          createNotification({
+            role: NOTIF_ADMIN,
+            title: "New order awaiting approval",
+            message: `${order.clientName} placed a new order. Review, call, and approve or cancel it.`,
+            orderId: order.id,
+          }),
+          createNotification({
+            role: NOTIF_EMPLOYEE,
+            title: "New order request registered",
+            message: `${order.clientName}'s order was registered and is waiting for admin approval.`,
+            orderId: order.id,
+          }),
+        ]);
+      }
+      saveData(updated);return updated;
+    });
     setModal(false);setForm(emptyForm);
-  },[form,emptyForm,setData]);
+  },[form,emptyForm,setData,isAdmin]);
 
   const addItem=()=>setForm(f=>({...f,items:[...f.items,{size:activeSizes[0]?.code||"89x465",qty:1,unitPrice:activeSizes[0]?.price||950}]}));
   const updItem=(i,k,v)=>setForm(f=>({...f,items:f.items.map((item,j)=>j===i?{...item,[k]:k==="qty"||k==="unitPrice"?Number(v):v,...(k==="size"?{unitPrice:getSz(data.sizes,v).price||0}:{})}:item)}));
@@ -918,10 +1052,25 @@ const OrderBook = memo(({data,setData,role})=>{
       {key:"_bal",label:"Balance",        render:(_,r)=><span className="mono" style={{color:r.totalValue-r.paidAmount>0?T.red:T.green,fontSize:12}}>{INR(r.totalValue-r.paidAmount)}</span>},
     ]:[]),
     {key:"status",    label:"Status",     render:(v)=><Badge status={v}/>},
+    ...(isAdmin?[{
+      key:"_review",
+      label:"Review",
+      render:(_,r)=>r.status==="awaiting-approval" ? (
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          <Btn small variant="success" onClick={()=>updateStatus(r.id,"pending")}>Approve</Btn>
+          <Btn small variant="danger" onClick={()=>updateStatus(r.id,"cancelled")}>Cancel</Btn>
+          {r.clientPhone && (
+            <a href={`tel:${r.clientPhone}`} style={{textDecoration:"none"}}>
+              <Btn small variant="blue">Call</Btn>
+            </a>
+          )}
+        </div>
+      ) : <span style={{fontSize:11,color:T.textMuted}}>-</span>,
+    }]:[]),
     {key:"_a",        label:"",           render:(_,r)=><Btn small onClick={()=>setDetail({...r})}>View</Btn>},
-  ],[isAdmin]);
+  ],[isAdmin, updateStatus]);
 
-  const tabs=["all","pending","in-production","ready-for-delivery","delivered","cancelled"];
+  const tabs=["all","awaiting-approval","pending","in-production","ready-for-delivery","delivered","cancelled"];
 
   return(
     <div className="fade">
@@ -991,6 +1140,17 @@ const OrderBook = memo(({data,setData,role})=>{
                 {["pending","in-production","ready-for-delivery","delivered","cancelled"].map(s=>(
                   <Btn key={s} small variant={detail.status===s?"primary":"ghost"} onClick={()=>updateStatus(detail.id,s)}>{STATUS[s].label}</Btn>
                 ))}
+              </div>
+            )}
+            {isAdmin && detail.status==="awaiting-approval" && (
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <Btn small variant="success" onClick={()=>updateStatus(detail.id,"pending")}>Approve Order</Btn>
+                <Btn small variant="danger" onClick={()=>updateStatus(detail.id,"cancelled")}>Cancel Order</Btn>
+                {detail.clientPhone && (
+                  <a href={`tel:${detail.clientPhone}`} style={{textDecoration:"none"}}>
+                    <Btn small variant="blue">Call Client</Btn>
+                  </a>
+                )}
               </div>
             )}
             {detail.notes&&<div style={{fontSize:13,color:T.textSec,fontStyle:"italic"}}>"{detail.notes}"</div>}
@@ -1776,6 +1936,7 @@ const Reports = memo(({data,setData})=>{
 const EmployeeView = memo(({data,setData})=>{
   const [tab,setTab]=useState("queue");
   const active=useMemo(()=>data.orders.filter(o=>["pending","in-production","ready-for-delivery"].includes(o.status)),[data.orders]);
+  const employeeOrders=useMemo(()=>data.orders.filter(o=>["pending","in-production","ready-for-delivery","delivered"].includes(o.status)),[data.orders]);
 
   const upd=useCallback((id,status)=>{
     setData(prev=>{const u={...prev,orders:prev.orders.map(o=>o.id===id?{...o,status,...(status==="delivered"?{deliveryDate:today()}:{})}:o)};saveData(u);return u;});
@@ -1844,7 +2005,7 @@ const EmployeeView = memo(({data,setData})=>{
             <Btn onClick={()=>{}}>+ New Order</Btn>
           </SectionHeader>
           <Card style={{padding:0}}>
-            <PaginatedTable cols={empOrderCols} rows={[...data.orders].sort((a,b)=>b.orderDate.localeCompare(a.orderDate))} emptyMsg="No orders yet."/>
+            <PaginatedTable cols={empOrderCols} rows={[...employeeOrders].sort((a,b)=>b.orderDate.localeCompare(a.orderDate))} emptyMsg="No production orders yet."/>
           </Card>
         </div>
       )}
@@ -1896,8 +2057,25 @@ const ClientPortal = memo(({data,setData,clientName,setClientName})=>{
   const submitOrder=()=>{
     const totalValue=cart.filter(i=>!i.isCustom).reduce((s,i)=>s+i.qty*i.unitPrice,0);
     const items=cart.map(i=>({size:i.size,qty:i.qty,unitPrice:i.unitPrice,isCustom:i.isCustom||false,customLabel:i.customLabel||null}));
-    const order={id:genId("ORD"),clientName:form.name,clientPhone:form.phone,clientEmail:form.email,clientAddress:form.address,items,status:"pending",orderDate:today(),dueDate:null,deliveryDate:null,totalValue,paidAmount:0,notes:form.notes+(cart.some(i=>i.isCustom)?" [Contains custom sizes — pricing TBD]":"")};
-    setData(prev=>{const u={...prev,orders:[...prev.orders,order]};saveData(u);return u;});
+    const order={id:genId("ORD"),clientName:form.name,clientPhone:form.phone,clientEmail:form.email,clientAddress:form.address,items,status:"awaiting-approval",orderDate:today(),dueDate:null,deliveryDate:null,totalValue,paidAmount:0,notes:form.notes+(cart.some(i=>i.isCustom)?" [Contains custom sizes — pricing TBD]":"")};
+    setData(prev=>{
+      const withOrder={...prev,orders:[...prev.orders,order]};
+      const updated = appendNotifications(withOrder, [
+        createNotification({
+          role: NOTIF_ADMIN,
+          title: "New order awaiting approval",
+          message: `${order.clientName} placed an order that needs admin confirmation.`,
+          orderId: order.id,
+        }),
+        createNotification({
+          role: NOTIF_EMPLOYEE,
+          title: "New order registered",
+          message: `${order.clientName} submitted a new order. It will enter production after admin approval.`,
+          orderId: order.id,
+        }),
+      ]);
+      saveData(updated);return updated;
+    });
     setClientName(form.name);setCart([]);setSubmitted(true);setTab("track");
   };
 
@@ -2101,13 +2279,56 @@ export default function App() {
   const [deferredPrompt,setDeferredPrompt]=useState(null);
   const [isInstalled,setIsInstalled]=useState(false);
   const [installDismissed,setInstallDismissed]=useState(false);
+  const dataRef = useRef(null);
 
   const isIos = typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isStandalone =
     typeof window !== "undefined" &&
     (window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true);
 
-  useEffect(()=>{ loadData().then(setData); },[]);
+  useEffect(()=>{ dataRef.current = data; },[data]);
+
+  const syncSharedData = useCallback(async () => {
+    if (Date.now() - getLastLocalWriteAt() < 2000) return;
+
+    const next = await loadData();
+    const current = dataRef.current;
+
+    if (!current || JSON.stringify(current) !== JSON.stringify(next)) {
+      setData(next);
+    }
+  },[]);
+
+  useEffect(()=>{ syncSharedData(); },[syncSharedData]);
+
+  useEffect(()=>{
+    if (typeof window === "undefined" || typeof document === "undefined") return undefined;
+
+    const onFocus = () => {
+      syncSharedData();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        syncSharedData();
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        syncSharedData();
+      }
+    }, 3000);
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  },[syncSharedData]);
 
   useEffect(()=>{ setIsInstalled(Boolean(isStandalone)); },[isStandalone]);
 
@@ -2149,6 +2370,17 @@ export default function App() {
 
     changed.forEach(([node, nextValue]) => {
       node.nodeValue = nextValue;
+    });
+
+    document.querySelectorAll("[placeholder],[title],[aria-label]").forEach((element) => {
+      ["placeholder", "title", "aria-label"].forEach((attr) => {
+        const current = element.getAttribute(attr);
+        if (!current) return;
+        const next = sanitizeUiText(current);
+        if (next !== current) {
+          element.setAttribute(attr, next);
+        }
+      });
     });
   },[data, role, page, clientName, installDismissed]);
 
@@ -2237,7 +2469,10 @@ export default function App() {
         </div>
         <Btn small variant="ghost" onClick={()=>setRole(null)}>← Exit</Btn>
       </div>
-      <div style={{padding:"24px"}}><EmployeeView data={data} setData={setData}/></div>
+      <div style={{padding:"24px"}}>
+        <NotificationPanel role={NOTIF_EMPLOYEE} data={data} setData={setData} title="Employee Notifications" />
+        <EmployeeView data={data} setData={setData}/>
+      </div>
     </div>
       <InstallAppButton
         canInstall={Boolean(deferredPrompt)}
@@ -2251,7 +2486,7 @@ export default function App() {
   );
 
   // ADMIN
-  const pendingCnt=data.orders.filter(o=>o.status==="pending").length;
+  const pendingCnt=data.orders.filter(o=>["awaiting-approval","pending"].includes(o.status)).length;
   const overdueCnt=data.orders.filter(o=>o.dueDate&&o.dueDate<today()&&!["delivered","cancelled"].includes(o.status)).length;
 
   const PAGES={
@@ -2307,6 +2542,7 @@ export default function App() {
         </div>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"24px"}}>
+        <NotificationPanel role={NOTIF_ADMIN} data={data} setData={setData} title="Admin Notifications" />
         {PAGES[page]}
       </div>
     </div>
@@ -2319,6 +2555,7 @@ export default function App() {
     </>
   );
 }
+
 
 
 

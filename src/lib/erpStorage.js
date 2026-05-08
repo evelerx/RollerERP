@@ -21,9 +21,13 @@ const createEmptyState = () => ({
   inventory: {},
   stockLogs: [],
   clients: [],
+  notifications: [],
 });
 
 let saveTimer = null;
+let lastLocalWriteAt = 0;
+
+export const getLastLocalWriteAt = () => lastLocalWriteAt;
 
 const readLocalBackup = () => {
   try {
@@ -80,6 +84,7 @@ const sanitizeErpData = (data, buildSeed) => {
     inventory: data.inventory && typeof data.inventory === "object" ? data.inventory : {},
     stockLogs: Array.isArray(data.stockLogs) ? data.stockLogs : [],
     clients: Array.isArray(data.clients) ? data.clients : [],
+    notifications: Array.isArray(data.notifications) ? data.notifications : [],
   };
 };
 
@@ -133,6 +138,7 @@ export const loadErpData = async (buildSeed) => {
 };
 
 export const saveErpData = (data) => {
+  lastLocalWriteAt = Date.now();
   writeLocalBackup(data);
 
   if (saveTimer) {
