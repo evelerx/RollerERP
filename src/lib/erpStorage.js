@@ -2,7 +2,7 @@ const LOCAL_STORAGE_KEY = "roller_erp_v4";
 const PRIMARY_RECORD_ID = "main";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 const ERP_STATE_ENDPOINT = `${API_BASE_URL}/api/erp-state/${PRIMARY_RECORD_ID}`;
-const REMOTE_TIMEOUT_MS = 5000;
+const REMOTE_TIMEOUT_MS = 2000;
 
 const DEMO_ORDER_IDS = new Set([
   "ORD-001","ORD-002","ORD-003","ORD-004","ORD-005","ORD-006","ORD-007",
@@ -98,6 +98,9 @@ const sanitizeErpData = (data, buildSeed) => {
     notifications: Array.isArray(data.notifications) ? data.notifications : [],
   };
 };
+
+export const readCachedErpData = (buildSeed) =>
+  sanitizeErpData(readLocalBackup(), buildSeed);
 
 const fetchRemoteState = async () => {
   const response = await fetchWithTimeout(ERP_STATE_ENDPOINT);

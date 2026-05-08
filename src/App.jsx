@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { getLastLocalWriteAt, loadErpData, saveErpData } from "./lib/erpStorage";
+import { getLastLocalWriteAt, loadErpData, readCachedErpData, saveErpData } from "./lib/erpStorage";
 
 // ── FONTS ──────────────────────────────────────────────────────────────────
 (() => {
@@ -196,6 +196,7 @@ const today  = () => new Date().toISOString().split("T")[0];
 const genId  = (p) => `${p}-${Date.now().toString(36).toUpperCase().slice(-6)}`;
 const NOTIF_ADMIN = "admin";
 const NOTIF_EMPLOYEE = "employee";
+const normalizePhone = (value) => String(value || "").replace(/\D/g, "");
 const getSz  = (sizes, code) => (sizes||[]).find(s=>s.code===code) || {};
 const getRMT = (id) => RM_TYPES.find(r=>r.id===id) || {};
 const isDue  = (d) => d && d < today() ? true : false;
@@ -1642,8 +1643,12 @@ const Clients = memo(({data,setData})=>{
   const [search,setSearch]=useState("");
   const ds=useDebounce(search,200);
 
-  const filtered=useMemo(()=>data.clients.filter(c=>!ds||c.name.toLowerCase().includes(ds.toLowerCase())),[data.clients,ds]);
-  const getOrders=useCallback((name)=>data.orders.filter(o=>o.clientName===name),[data.orders]);
+  const filtered=useMemo(()=>data.clients.filter(c=>!ds||c.name.toLowerCase().includes(ds.toLowerCase())||normalizePhone(c.phone).includes(normalizePhone(ds))),[data.clients,ds]);
+  const getOrders=useCallback((client)=>data.orders.filter(o=>{
+    const clientPhone = normalizePhone(client?.phone);
+    if (clientPhone) return normalizePhone(o.clientPhone)===clientPhone;
+    return o.clientName===client?.name;
+  }),[data.orders]);
 
   const add=()=>{
     const client={id:genId("C"),...form};
@@ -1660,7 +1665,7 @@ const Clients = memo(({data,setData})=>{
       <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:16}}>
         <Card style={{padding:0,maxHeight:600,overflowY:"auto"}}>
           {filtered.map(c=>{
-            const orders=getOrders(c.name);
+            const orders=getOrders(c);
             const total=orders.reduce((s,o)=>s+o.totalValue,0);
             const due=orders.reduce((s,o)=>s+(o.totalValue-o.paidAmount),0);
             return(
@@ -1694,22 +1699,22 @@ const Clients = memo(({data,setData})=>{
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
                 <div style={{background:T.surface,borderRadius:6,padding:"12px"}}>
                   <div style={{fontSize:11,color:T.textSec,fontWeight:600}}>ORDERS</div>
-                  <div className="mono" style={{fontSize:22,color:T.text,marginTop:4}}>{getOrders(sel.name).length}</div>
+                  <div className="mono" style={{fontSize:22,color:T.text,marginTop:4}}>{getOrders(sel).length}</div>
                 </div>
                 <div style={{background:T.surface,borderRadius:6,padding:"12px"}}>
                   <div style={{fontSize:11,color:T.textSec,fontWeight:600}}>TOTAL VALUE</div>
-                  <div className="mono" style={{fontSize:16,color:T.amber,marginTop:4}}>{INR(getOrders(sel.name).reduce((s,o)=>s+o.totalValue,0))}</div>
+                  <div className="mono" style={{fontSize:16,color:T.amber,marginTop:4}}>{INR(getOrders(sel).reduce((s,o)=>s+o.totalValue,0))}</div>
                 </div>
                 <div style={{background:T.surface,borderRadius:6,padding:"12px"}}>
                   <div style={{fontSize:11,color:T.textSec,fontWeight:600}}>BALANCE DUE</div>
-                  <div className="mono" style={{fontSize:16,marginTop:4,color:getOrders(sel.name).reduce((s,o)=>s+(o.totalValue-o.paidAmount),0)>0?T.red:T.green}}>
-                    {INR(getOrders(sel.name).reduce((s,o)=>s+(o.totalValue-o.paidAmount),0))}
+                  <div className="mono" style={{fontSize:16,marginTop:4,color:getOrders(sel).reduce((s,o)=>s+(o.totalValue-o.paidAmount),0)>0?T.red:T.green}}>
+                    {INR(getOrders(sel).reduce((s,o)=>s+(o.totalValue-o.paidAmount),0))}
                   </div>
                 </div>
               </div>
               <div className="raj" style={{fontSize:13,fontWeight:700,color:T.textSec,marginBottom:8}}>ORDER HISTORY</div>
               <div style={{maxHeight:280,overflowY:"auto"}}>
-                {getOrders(sel.name).sort((a,b)=>b.orderDate.localeCompare(a.orderDate)).map(o=>(
+                {getOrders(sel).sort((a,b)=>b.orderDate.localeCompare(a.orderDate)).map(o=>(
                   <div key={o.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",marginBottom:8,background:T.surface,borderRadius:6,border:`1px solid ${T.border}`}}>
                     <div>
                       <div className="mono" style={{fontSize:12,color:T.amber}}>{o.id}</div>
@@ -2020,18 +2025,33 @@ const EmployeeView = memo(({data,setData})=>{
 // ═══════════════════════════════════════════════════════════════════════════
 // ── CLIENT PORTAL ──────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
-const ClientPortal = memo(({data,setData,clientName,setClientName})=>{
+const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,setClientPhone})=>{
   const [tab,setTab]=useState("catalog");
   const [cart,setCart]=useState([]);
   const [form,setForm]=useState({name:"",phone:"",email:"",address:"",notes:""});
   const [submitted,setSubmitted]=useState(false);
   const [trackId,setTrackId]=useState("");
+  const [accountPhoneInput,setAccountPhoneInput]=useState(clientPhone || "");
   const [customModal,setCustomModal]=useState(false);
   const [customForm,setCustomForm]=useState({diameter:"",length:"",qty:10,note:""});
 
   const activeSizes=useMemo(()=>(data.sizes||[]).filter(s=>s.active!==false),[data.sizes]);
-  const clientOrds=useMemo(()=>clientName?data.orders.filter(o=>o.clientName.toLowerCase().includes(clientName.toLowerCase())):[],[data.orders,clientName]);
+  const normalizedClientPhone = useMemo(()=>normalizePhone(clientPhone),[clientPhone]);
+  const clientOrds=useMemo(()=>{
+    if (normalizedClientPhone) {
+      return data.orders.filter(o=>normalizePhone(o.clientPhone)===normalizedClientPhone);
+    }
+    return clientName?data.orders.filter(o=>o.clientName.toLowerCase().includes(clientName.toLowerCase())):[];
+  },[data.orders,clientName,normalizedClientPhone]);
+  const clientAccount = useMemo(()=>{
+    if (!normalizedClientPhone) return null;
+    return (data.clients || []).find(c=>normalizePhone(c.phone)===normalizedClientPhone) || null;
+  },[data.clients, normalizedClientPhone]);
   const trackedOrd=useMemo(()=>data.orders.find(o=>o.id.toLowerCase()===trackId.toLowerCase()),[data.orders,trackId]);
+
+  useEffect(()=>{
+    if (clientPhone) setAccountPhoneInput(clientPhone);
+  },[clientPhone]);
 
   const addToCart=(code)=>{
     const sz=activeSizes.find(s=>s.code===code);
@@ -2059,7 +2079,21 @@ const ClientPortal = memo(({data,setData,clientName,setClientName})=>{
     const items=cart.map(i=>({size:i.size,qty:i.qty,unitPrice:i.unitPrice,isCustom:i.isCustom||false,customLabel:i.customLabel||null}));
     const order={id:genId("ORD"),clientName:form.name,clientPhone:form.phone,clientEmail:form.email,clientAddress:form.address,items,status:"awaiting-approval",orderDate:today(),dueDate:null,deliveryDate:null,totalValue,paidAmount:0,notes:form.notes+(cart.some(i=>i.isCustom)?" [Contains custom sizes — pricing TBD]":"")};
     setData(prev=>{
-      const withOrder={...prev,orders:[...prev.orders,order]};
+      const normalizedPhone = normalizePhone(form.phone);
+      const existingClientIndex = (prev.clients || []).findIndex(c=>normalizePhone(c.phone)===normalizedPhone);
+      const accountClient = {
+        id: existingClientIndex >= 0 ? prev.clients[existingClientIndex].id : genId("C"),
+        name: form.name,
+        phone: form.phone,
+        email: form.email,
+        address: form.address,
+        gst: existingClientIndex >= 0 ? (prev.clients[existingClientIndex].gst || "") : "",
+      };
+      const nextClients =
+        existingClientIndex >= 0
+          ? prev.clients.map((client, index) => index===existingClientIndex ? {...client, ...accountClient} : client)
+          : [...(prev.clients || []), accountClient];
+      const withOrder={...prev,clients:nextClients,orders:[...prev.orders,order]};
       const updated = appendNotifications(withOrder, [
         createNotification({
           role: NOTIF_ADMIN,
@@ -2076,7 +2110,23 @@ const ClientPortal = memo(({data,setData,clientName,setClientName})=>{
       ]);
       saveData(updated);return updated;
     });
-    setClientName(form.name);setCart([]);setSubmitted(true);setTab("track");
+    setClientName(form.name);
+    setClientPhone(form.phone);
+    setAccountPhoneInput(form.phone);
+    setTrackId(order.id);
+    setCart([]);setSubmitted(true);setTab("track");
+  };
+
+  const openClientAccount = () => {
+    const normalizedPhone = normalizePhone(accountPhoneInput);
+    if (!normalizedPhone) return;
+    const matchedOrder = (data.orders || []).find(o=>normalizePhone(o.clientPhone)===normalizedPhone);
+    const matchedClient = (data.clients || []).find(c=>normalizePhone(c.phone)===normalizedPhone);
+    setClientPhone(accountPhoneInput);
+    if (matchedClient?.name) setClientName(matchedClient.name);
+    else if (matchedOrder?.clientName) setClientName(matchedOrder.clientName);
+    setSubmitted(false);
+    setTab("track");
   };
 
   return(
@@ -2186,6 +2236,14 @@ const ClientPortal = memo(({data,setData,clientName,setClientName})=>{
       {tab==="track"&&(
         <div>
           <SectionHeader title="Track Your Order"/>
+          <Card style={{marginBottom:16}}>
+            <div className="raj" style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:10}}>Client Account</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:10,alignItems:"end"}}>
+              <Inp label="Registered Phone" value={accountPhoneInput} onChange={setAccountPhoneInput} placeholder="Enter client phone"/>
+              <Btn onClick={openClientAccount} disabled={!normalizePhone(accountPhoneInput)}>Open Account</Btn>
+            </div>
+            <div style={{fontSize:12,color:T.textSec,marginTop:8}}>Any client who ordered once can open full shared history with phone number.</div>
+          </Card>
           {submitted&&(
             <div style={{background:"rgba(34,197,94,.08)",border:"1px solid rgba(34,197,94,.25)",borderRadius:8,padding:"14px 18px",marginBottom:16,display:"flex",gap:12,alignItems:"center"}}>
               <span style={{fontSize:20}}>✅</span>
@@ -2210,6 +2268,31 @@ const ClientPortal = memo(({data,setData,clientName,setClientName})=>{
             )}
             {trackId&&!trackedOrd&&<div style={{marginTop:10,fontSize:12,color:T.red}}>Order not found.</div>}
           </Card>
+          {clientAccount&&(
+            <Card style={{marginBottom:16}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:12}}>
+                <div>
+                  <div className="raj" style={{fontSize:17,fontWeight:700,color:T.text}}>{clientAccount.name || clientName}</div>
+                  <div style={{fontSize:12,color:T.textSec}}>{clientAccount.phone || clientPhone}{clientAccount.email?` · ${clientAccount.email}`:""}</div>
+                </div>
+                <span style={{padding:"4px 10px",borderRadius:20,background:`${T.green}14`,color:T.green,fontSize:11,fontWeight:700}}>ACTIVE</span>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+                <div style={{background:T.surface,borderRadius:8,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,color:T.textSec,fontWeight:700}}>TOTAL ORDERS</div>
+                  <div className="mono" style={{fontSize:20,color:T.text,marginTop:4}}>{clientOrds.length}</div>
+                </div>
+                <div style={{background:T.surface,borderRadius:8,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,color:T.textSec,fontWeight:700}}>ACTIVE</div>
+                  <div className="mono" style={{fontSize:20,color:T.amber,marginTop:4}}>{clientOrds.filter(o=>!["delivered","cancelled"].includes(o.status)).length}</div>
+                </div>
+                <div style={{background:T.surface,borderRadius:8,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,color:T.textSec,fontWeight:700}}>DELIVERED</div>
+                  <div className="mono" style={{fontSize:20,color:T.green,marginTop:4}}>{clientOrds.filter(o=>o.status==="delivered").length}</div>
+                </div>
+              </div>
+            </Card>
+          )}
           {clientOrds.length>0&&(
             <div>
               <div style={{fontSize:12,fontWeight:700,color:T.textSec,marginBottom:10,letterSpacing:.5}}>YOUR ORDERS</div>
@@ -2272,10 +2355,11 @@ const ADMIN_NAV = [
 ];
 
 export default function App() {
-  const [data,setData]=useState(null);
+  const [data,setData]=useState(()=>readCachedErpData(buildSeed));
   const [role,setRole]=useState(null);
   const [page,setPage]=useState("dashboard");
   const [clientName,setClientName]=useState("");
+  const [clientPhone,setClientPhone]=useState("");
   const [deferredPrompt,setDeferredPrompt]=useState(null);
   const [isInstalled,setIsInstalled]=useState(false);
   const [installDismissed,setInstallDismissed]=useState(false);
@@ -2442,9 +2526,9 @@ export default function App() {
           <span className="raj" style={{fontSize:18,fontWeight:700,color:T.text}}>Roller ERP</span>
           <span style={{padding:"2px 10px",background:"rgba(34,197,94,.12)",color:T.green,borderRadius:20,fontSize:11,fontWeight:700}}>CLIENT PORTAL</span>
         </div>
-        <Btn small variant="ghost" onClick={()=>{setRole(null);setClientName("");}}>← Exit</Btn>
+        <Btn small variant="ghost" onClick={()=>{setRole(null);setClientName("");setClientPhone("");}}>← Exit</Btn>
       </div>
-      <div style={{padding:"24px"}}><ClientPortal data={data} setData={setData} clientName={clientName} setClientName={setClientName}/></div>
+      <div style={{padding:"24px"}}><ClientPortal data={data} setData={setData} clientName={clientName} setClientName={setClientName} clientPhone={clientPhone} setClientPhone={setClientPhone}/></div>
     </div>
       <InstallAppButton
         canInstall={Boolean(deferredPrompt)}
