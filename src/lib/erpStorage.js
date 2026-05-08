@@ -71,34 +71,35 @@ const fetchWithTimeout = async (url, options = {}) => {
   }
 };
 
-const isSubsetOf = (items, getKey, knownKeys) =>
-  Array.isArray(items) && items.length > 0 && items.every((item) => knownKeys.has(getKey(item)));
-
-const isLikelyDemoData = (data) =>
-  Boolean(data) &&
-  isSubsetOf(data.orders || [], (item) => item.id, DEMO_ORDER_IDS) &&
-  isSubsetOf(data.rawMaterials || [], (item) => item.id, DEMO_RAW_IDS) &&
-  isSubsetOf(data.clients || [], (item) => item.id, DEMO_CLIENT_IDS);
+const stripDemoRecords = (data) => ({
+  ...data,
+  orders: Array.isArray(data.orders)
+    ? data.orders.filter((item) => !DEMO_ORDER_IDS.has(item.id))
+    : [],
+  rawMaterials: Array.isArray(data.rawMaterials)
+    ? data.rawMaterials.filter((item) => !DEMO_RAW_IDS.has(item.id))
+    : [],
+  clients: Array.isArray(data.clients)
+    ? data.clients.filter((item) => !DEMO_CLIENT_IDS.has(item.id))
+    : [],
+});
 
 const sanitizeErpData = (data, buildSeed) => {
   if (!data || typeof data !== "object") {
     return createEmptyState();
   }
 
-  if (isLikelyDemoData(data)) {
-    return createEmptyState();
-  }
-
   const fallback = buildSeed();
+  const cleaned = stripDemoRecords(data);
 
   return {
-    sizes: Array.isArray(data.sizes) ? data.sizes : fallback.sizes,
-    orders: Array.isArray(data.orders) ? data.orders : [],
-    rawMaterials: Array.isArray(data.rawMaterials) ? data.rawMaterials : [],
-    inventory: data.inventory && typeof data.inventory === "object" ? data.inventory : {},
-    stockLogs: Array.isArray(data.stockLogs) ? data.stockLogs : [],
-    clients: Array.isArray(data.clients) ? data.clients : [],
-    notifications: Array.isArray(data.notifications) ? data.notifications : [],
+    sizes: Array.isArray(cleaned.sizes) ? cleaned.sizes : fallback.sizes,
+    orders: Array.isArray(cleaned.orders) ? cleaned.orders : fallback.orders,
+    rawMaterials: Array.isArray(cleaned.rawMaterials) ? cleaned.rawMaterials : fallback.rawMaterials,
+    inventory: cleaned.inventory && typeof cleaned.inventory === "object" ? cleaned.inventory : fallback.inventory,
+    stockLogs: Array.isArray(cleaned.stockLogs) ? cleaned.stockLogs : fallback.stockLogs,
+    clients: Array.isArray(cleaned.clients) ? cleaned.clients : fallback.clients,
+    notifications: Array.isArray(cleaned.notifications) ? cleaned.notifications : fallback.notifications,
   };
 };
 

@@ -137,51 +137,12 @@ const PAGE_SIZE = 50; // rows per page for performance
 
 // ── SEED DATA ──────────────────────────────────────────────────────────────
 const buildSeed = () => ({
-  sizes: DEFAULT_SIZES,
-  orders: [
-    {id:"ORD-001",clientName:"Rajesh Mining Co.",clientPhone:"9876543210",clientEmail:"rajesh@mining.com",clientAddress:"Rajasthan",items:[{size:"102x465",qty:50,unitPrice:1250}],status:"delivered",orderDate:"2024-10-15",dueDate:"2024-10-28",deliveryDate:"2024-10-28",totalValue:62500,paidAmount:62500,notes:"Urgent"},
-    {id:"ORD-002",clientName:"Sharma Stone Crusher",clientPhone:"9988776655",clientEmail:"sharma@stone.com",clientAddress:"Madhya Pradesh",items:[{size:"89x465",qty:100,unitPrice:950},{size:"127x465",qty:30,unitPrice:1650}],status:"delivered",orderDate:"2024-11-03",dueDate:"2024-11-20",deliveryDate:"2024-11-20",totalValue:144500,paidAmount:144500,notes:""},
-    {id:"ORD-003",clientName:"Gupta Quarry Works",clientPhone:"9123456789",clientEmail:"gupta@quarry.com",clientAddress:"Uttar Pradesh",items:[{size:"159x530",qty:20,unitPrice:2450}],status:"delivered",orderDate:"2024-12-10",dueDate:"2024-12-25",deliveryDate:"2024-12-25",totalValue:49000,paidAmount:49000,notes:""},
-    {id:"ORD-004",clientName:"Singh Aggregates",clientPhone:"9812345678",clientEmail:"singh@agg.com",clientAddress:"Punjab",items:[{size:"102x530",qty:75,unitPrice:1400}],status:"delivered",orderDate:"2025-01-05",dueDate:"2025-01-22",deliveryDate:"2025-01-22",totalValue:105000,paidAmount:105000,notes:""},
-    {id:"ORD-005",clientName:"Patel Crushers Ltd.",clientPhone:"9765432109",clientEmail:"patel@crushers.com",clientAddress:"Gujarat",items:[{size:"89x380",qty:200,unitPrice:850},{size:"89x465",qty:100,unitPrice:950}],status:"delivered",orderDate:"2025-02-01",dueDate:"2025-02-18",deliveryDate:"2025-02-18",totalValue:265000,paidAmount:265000,notes:"Seasonal bulk"},
-    {id:"ORD-006",clientName:"Kumar Mining Pvt.",clientPhone:"9654321098",clientEmail:"kumar@mining.com",clientAddress:"Chhattisgarh",items:[{size:"127x530",qty:40,unitPrice:1850}],status:"delivered",orderDate:"2025-02-12",dueDate:"2025-02-28",deliveryDate:"2025-02-28",totalValue:74000,paidAmount:74000,notes:""},
-    {id:"ORD-007",clientName:"Agarwal Infra",clientPhone:"9432109876",clientEmail:"agarwal@infra.com",clientAddress:"Haryana",items:[{size:"159x465",qty:15,unitPrice:2200},{size:"127x465",qty:25,unitPrice:1650}],status:"delivered",orderDate:"2025-03-10",dueDate:"2025-03-28",deliveryDate:"2025-03-28",totalValue:74250,paidAmount:74250,notes:""},
-    {id:"ORD-008",clientName:"Rajesh Mining Co.",clientPhone:"9876543210",clientEmail:"rajesh@mining.com",clientAddress:"Rajasthan",items:[{size:"102x465",qty:80,unitPrice:1250}],status:"delivered",orderDate:"2025-04-02",dueDate:"2025-04-18",deliveryDate:"2025-04-18",totalValue:100000,paidAmount:100000,notes:""},
-    {id:"ORD-009",clientName:"Sharma Stone Crusher",clientPhone:"9988776655",clientEmail:"sharma@stone.com",clientAddress:"Madhya Pradesh",items:[{size:"89x530",qty:150,unitPrice:1050}],status:"delivered",orderDate:"2025-05-05",dueDate:"2025-05-22",deliveryDate:"2025-05-22",totalValue:157500,paidAmount:157500,notes:""},
-    {id:"ORD-010",clientName:"Verma Stone Works",clientPhone:"9543210987",clientEmail:"verma@stone.com",clientAddress:"Bihar",items:[{size:"102x465",qty:120,unitPrice:1250}],status:"delivered",orderDate:"2025-06-01",dueDate:"2025-06-20",deliveryDate:"2025-06-20",totalValue:150000,paidAmount:150000,notes:""},
-    {id:"ORD-011",clientName:"Singh Aggregates",clientPhone:"9812345678",clientEmail:"singh@agg.com",clientAddress:"Punjab",items:[{size:"102x380",qty:60,unitPrice:1100}],status:"in-production",orderDate:"2025-07-02",dueDate:"2025-07-20",deliveryDate:null,totalValue:66000,paidAmount:33000,notes:"50% advance"},
-    {id:"ORD-012",clientName:"Patel Crushers Ltd.",clientPhone:"9765432109",clientEmail:"patel@crushers.com",clientAddress:"Gujarat",items:[{size:"89x465",qty:200,unitPrice:950}],status:"ready-for-delivery",orderDate:"2025-07-05",dueDate:"2025-07-18",deliveryDate:null,totalValue:190000,paidAmount:190000,notes:"Paid in full"},
-    {id:"ORD-013",clientName:"Mehta Quarry",clientPhone:"9321098765",clientEmail:"mehta@quarry.com",clientAddress:"Rajasthan",items:[{size:"127x530",qty:30,unitPrice:1850}],status:"pending",orderDate:"2025-07-12",dueDate:"2025-08-01",deliveryDate:null,totalValue:55500,paidAmount:0,notes:""},
-  ],
-  rawMaterials: [
-    {id:"RM-001",type:"pipes",supplier:"Steel Hub Pvt.",qty:500,unitCost:2200,totalCost:1100000,paidAmount:1100000,orderDate:"2024-10-01",receivedDate:"2024-10-08",status:"received"},
-    {id:"RM-002",type:"bearings",supplier:"NSK Bearings",qty:2000,unitCost:180,totalCost:360000,paidAmount:360000,orderDate:"2024-10-01",receivedDate:"2024-10-06",status:"received"},
-    {id:"RM-003",type:"shaft",supplier:"Iron Masters",qty:1000,unitCost:420,totalCost:420000,paidAmount:420000,orderDate:"2024-11-10",receivedDate:"2024-11-18",status:"received"},
-    {id:"RM-004",type:"seals",supplier:"SKF India",qty:3000,unitCost:45,totalCost:135000,paidAmount:135000,orderDate:"2024-12-01",receivedDate:"2024-12-08",status:"received"},
-    {id:"RM-005",type:"caps",supplier:"MetalCraft",qty:2000,unitCost:35,totalCost:70000,paidAmount:70000,orderDate:"2025-01-15",receivedDate:"2025-01-22",status:"received"},
-    {id:"RM-006",type:"locks",supplier:"FastenPro",qty:2500,unitCost:28,totalCost:70000,paidAmount:70000,orderDate:"2025-02-01",receivedDate:"2025-02-07",status:"received"},
-    {id:"RM-007",type:"pipes",supplier:"Steel Hub Pvt.",qty:300,unitCost:2250,totalCost:675000,paidAmount:675000,orderDate:"2025-04-15",receivedDate:"2025-04-22",status:"received"},
-    {id:"RM-008",type:"bearings",supplier:"FAG Bearings",qty:1500,unitCost:195,totalCost:292500,paidAmount:292500,orderDate:"2025-05-01",receivedDate:"2025-05-09",status:"received"},
-    {id:"RM-009",type:"sleeves",supplier:"PrecisionParts",qty:800,unitCost:120,totalCost:96000,paidAmount:96000,orderDate:"2025-06-01",receivedDate:"2025-06-08",status:"received"},
-    {id:"RM-010",type:"pipes",supplier:"Steel Hub Pvt.",qty:400,unitCost:2300,totalCost:920000,paidAmount:460000,orderDate:"2025-07-01",receivedDate:null,status:"ordered"},
-    {id:"RM-011",type:"bearings",supplier:"NSK Bearings",qty:2000,unitCost:185,totalCost:370000,paidAmount:0,orderDate:"2025-07-05",receivedDate:null,status:"ordered"},
-  ],
-  inventory: {
-    "89x380":45,"89x465":32,"89x530":18,"102x380":24,
-    "102x465":8,"102x530":15,"127x465":12,"127x530":6,
-    "159x465":3,"159x530":2
-  },
-  stockLogs: [], // {id, type:"add"|"reduce"|"transfer", size, qty, note, orderId, date}
-  clients: [
-    {id:"C001",name:"Rajesh Mining Co.",phone:"9876543210",email:"rajesh@mining.com",address:"Rajasthan",gst:"08ABCDE1234F1Z5"},
-    {id:"C002",name:"Sharma Stone Crusher",phone:"9988776655",email:"sharma@stone.com",address:"Madhya Pradesh",gst:"23ABCDE5678G2Z6"},
-    {id:"C003",name:"Gupta Quarry Works",phone:"9123456789",email:"gupta@quarry.com",address:"Uttar Pradesh",gst:"09ABCDE9012H3Z7"},
-    {id:"C004",name:"Singh Aggregates",phone:"9812345678",email:"singh@agg.com",address:"Punjab",gst:"03ABCDE3456I4Z8"},
-    {id:"C005",name:"Patel Crushers Ltd.",phone:"9765432109",email:"patel@crushers.com",address:"Gujarat",gst:"24ABCDE7890J5Z9"},
-    {id:"C006",name:"Kumar Mining Pvt.",phone:"9654321098",email:"kumar@mining.com",address:"Chhattisgarh",gst:"22ABCDE2345K6Z0"},
-    {id:"C007",name:"Agarwal Infra",phone:"9432109876",email:"agarwal@infra.com",address:"Haryana",gst:"06ABCDE6789L7Z1"},
-    {id:"C008",name:"Verma Stone Works",phone:"9543210987",email:"verma@stone.com",address:"Bihar",gst:"10ABCDE0123M8Z2"},
-  ],
+  sizes: [],
+  orders: [],
+  rawMaterials: [],
+  inventory: {},
+  stockLogs: [],
+  clients: [],
   notifications: [],
 });
 
@@ -966,7 +927,7 @@ const OrderBook = memo(({data,setData,role})=>{
 
   const emptyForm=useMemo(()=>({
     clientName:"",clientPhone:"",clientEmail:"",clientAddress:"",
-    items:[{size:activeSizes[0]?.code||"89x465",qty:1,unitPrice:activeSizes[0]?.price||950}],
+    items:activeSizes[0]?[{size:activeSizes[0].code,qty:1,unitPrice:activeSizes[0].price||0}]:[],
     notes:"",paidAmount:0,dueDate:""
   }),[activeSizes]);
 
@@ -1070,7 +1031,10 @@ const OrderBook = memo(({data,setData,role})=>{
     setModal(false);setForm(emptyForm);
   },[form,emptyForm,setData,isAdmin]);
 
-  const addItem=()=>setForm(f=>({...f,items:[...f.items,{size:activeSizes[0]?.code||"89x465",qty:1,unitPrice:activeSizes[0]?.price||950}]}));
+  const addItem=()=>{
+    if(!activeSizes[0]) return;
+    setForm(f=>({...f,items:[...f.items,{size:activeSizes[0].code,qty:1,unitPrice:activeSizes[0].price||0}]}));
+  };
   const updItem=(i,k,v)=>setForm(f=>({...f,items:f.items.map((item,j)=>j===i?{...item,[k]:k==="qty"||k==="unitPrice"?Number(v):v,...(k==="size"?{unitPrice:getSz(data.sizes,v).price||0}:{})}:item)}));
   const remItem=(i)=>setForm(f=>({...f,items:f.items.filter((_,j)=>j!==i)}));
 
@@ -1993,6 +1957,16 @@ const EmployeeView = memo(({data,setData})=>{
   },[setData]);
 
   // Employee order columns — NO value/paid/balance columns
+  const renderEmployeeStageButtons=useCallback((order,justifyContent="flex-end")=>(
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent}}>
+      {employeeStages.map((stage)=>(
+        <Btn key={stage} small variant={order.status===stage?"primary":"ghost"} onClick={()=>upd(order.id,stage)}>
+          {STATUS[stage].label}
+        </Btn>
+      ))}
+    </div>
+  ),[employeeStages,upd]);
+
   const empOrderCols=useMemo(()=>[
     {key:"id",        label:"Order ID",  mono:true},
     {key:"clientName",label:"Client"},
@@ -2004,6 +1978,16 @@ const EmployeeView = memo(({data,setData})=>{
       {r.status==="pending"?"▶ Start":r.status==="in-production"?"✓ Ready":r.status==="ready-for-delivery"?"🚛 Deliver":"—"}
     </Btn>},
   ],[upd]);
+
+  const employeeOrderTableCols=useMemo(()=>[
+    {key:"id",        label:"Order ID",  mono:true},
+    {key:"clientName",label:"Client"},
+    {key:"orderDate", label:"Date"},
+    {key:"dueDate",   label:"Due Date",  render:(v)=><DueChip date={v}/>},
+    {key:"items",     label:"Items",     render:(v)=>`${v.reduce((s,i)=>s+i.qty,0)} pcs`},
+    {key:"status",    label:"Status",    render:(v)=><Badge status={v}/>},
+    {key:"_a",        label:"Update Stage", render:(_,r)=>renderEmployeeStageButtons(r,"flex-start")},
+  ],[renderEmployeeStageButtons]);
 
   return(
     <div className="fade">
@@ -2046,9 +2030,11 @@ const EmployeeView = memo(({data,setData})=>{
                       </Btn>
                     ))}
                   </div>
+                  {false && <>
                   {order.status==="pending"            &&<Btn small variant="blue"    onClick={()=>upd(order.id,"in-production")}>â–¶ Start</Btn>}
                   {order.status==="in-production"      &&<Btn small variant="success" onClick={()=>upd(order.id,"ready-for-delivery")}>✓ Ready</Btn>}
                   {order.status==="ready-for-delivery" &&<Btn small                   onClick={()=>upd(order.id,"delivered")}>🚛 Delivered</Btn>}
+                  </>}
                 </div>
               </div>
             </Card>
@@ -2059,10 +2045,10 @@ const EmployeeView = memo(({data,setData})=>{
       {tab==="orders"&&(
         <div>
           <SectionHeader title="All Orders" subtitle="No financial data shown — production view only">
-            <Btn onClick={()=>{}}>+ New Order</Btn>
+            <Btn onClick={()=>setTab("queue")}>Open Queue</Btn>
           </SectionHeader>
           <Card style={{padding:0}}>
-            <PaginatedTable cols={empOrderCols} rows={[...employeeOrders].sort((a,b)=>b.orderDate.localeCompare(a.orderDate))} emptyMsg="No production orders yet."/>
+            <PaginatedTable cols={employeeOrderTableCols} rows={[...employeeOrders].sort((a,b)=>b.orderDate.localeCompare(a.orderDate))} emptyMsg="No production orders yet."/>
           </Card>
         </div>
       )}
