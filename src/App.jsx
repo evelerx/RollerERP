@@ -487,6 +487,20 @@ const useDebounce = (val, ms=300) => {
   return dv;
 };
 
+const useIsMobile = (breakpoint = 720) => {
+  const getValue = () => (typeof window !== "undefined" ? window.innerWidth <= breakpoint : false);
+  const [isMobile, setIsMobile] = useState(getValue);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const onResize = () => setIsMobile(getValue());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [breakpoint]);
+
+  return isMobile;
+};
+
 const InstallAppButton = memo(({ canInstall, onInstall, onDismiss, showIosHint, isInstalled, dismissed=false, compact=false }) => {
   if (isInstalled) return null;
   if (dismissed) return null;
@@ -2063,6 +2077,7 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
   const [accountPhoneInput,setAccountPhoneInput]=useState(clientPhone || "");
   const [customModal,setCustomModal]=useState(false);
   const [customForm,setCustomForm]=useState({diameter:"",length:"",qty:10,note:""});
+  const isMobile = useIsMobile();
 
   const activeSizes=useMemo(()=>(data.sizes||[]).filter(s=>s.active!==false),[data.sizes]);
   const normalizedClientPhone = useMemo(()=>normalizePhone(clientPhone),[clientPhone]);
@@ -2244,7 +2259,7 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
               </Card>
               <Card>
                 <div className="raj" style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:12}}>Your Details</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12}}>
                   <Inp label="Full Name / Company" value={form.name}    onChange={v=>setForm(f=>({...f,name:v}))}    required/>
                   <Inp label="Phone"               value={form.phone}   onChange={v=>setForm(f=>({...f,phone:v}))}   required/>
                   <Inp label="Email"               value={form.email}   onChange={v=>setForm(f=>({...f,email:v}))}/>
@@ -2267,7 +2282,7 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
           <SectionHeader title="Track Your Order"/>
           <Card style={{marginBottom:16}}>
             <div className="raj" style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:10}}>Client Account</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:10,alignItems:"end"}}>
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr auto",gap:10,alignItems:"end"}}>
               <Inp label="Registered Phone" value={accountPhoneInput} onChange={setAccountPhoneInput} placeholder="Enter client phone"/>
               <Btn onClick={openClientAccount} disabled={!normalizePhone(accountPhoneInput)}>Open Account</Btn>
             </div>
@@ -2306,7 +2321,7 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
                 </div>
                 <span style={{padding:"4px 10px",borderRadius:20,background:`${T.green}14`,color:T.green,fontSize:11,fontWeight:700}}>ACTIVE</span>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:10}}>
                 <div style={{background:T.surface,borderRadius:8,padding:"10px 12px"}}>
                   <div style={{fontSize:11,color:T.textSec,fontWeight:700}}>TOTAL ORDERS</div>
                   <div className="mono" style={{fontSize:20,color:T.text,marginTop:4}}>{clientOrds.length}</div>
@@ -2347,7 +2362,7 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
           <div style={{background:`rgba(167,139,250,.07)`,border:`1px solid rgba(167,139,250,.25)`,borderRadius:6,padding:"10px 14px",fontSize:13,color:T.textSec}}>
             Specify your required dimensions. Our team will confirm pricing and availability.
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12}}>
             <Inp label="Diameter (mm)" type="number" value={customForm.diameter} onChange={v=>setCustomForm(f=>({...f,diameter:v}))} required placeholder="e.g. 114"/>
             <Inp label="Length (mm)"   type="number" value={customForm.length}   onChange={v=>setCustomForm(f=>({...f,length:v}))}   required placeholder="e.g. 600"/>
             <Inp label="Quantity (pcs)" type="number" value={customForm.qty}     onChange={v=>setCustomForm(f=>({...f,qty:v}))}      min="1"/>

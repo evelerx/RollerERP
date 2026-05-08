@@ -26,6 +26,8 @@ const createEmptyState = () => ({
 
 let saveTimer = null;
 let lastLocalWriteAt = 0;
+let pendingRemotePayload = null;
+let retryDelayMs = 1000;
 
 export const getLastLocalWriteAt = () => lastLocalWriteAt;
 
@@ -127,6 +129,27 @@ const upsertRemoteState = async (data) => {
   }
 };
 
+const queueRemoteRetry = () => {
+  if (saveTimer || !pendingRemotePayload) return;
+
+  saveTimer = setTimeout(async () => {
+    saveTimer = null;
+
+    if (!pendingRemotePayload) return;
+
+    try {
+      const payload = pendingRemotePayload;
+      await upsertRemoteState(payload);
+      pendingRemotePayload = null;
+      retryDelayMs = 1000;
+    } catch (error) {
+      console.error("Backend retry failed, will retry again.", error);
+      retryDelayMs = Math.min(retryDelayMs * 2, 10000);
+      queueRemoteRetry();
+    }
+  }, retryDelayMs);
+};
+
 export const loadErpData = async (buildSeed) => {
   const localData = readLocalBackup();
 
@@ -154,14 +177,17 @@ export const loadErpData = async (buildSeed) => {
 export const saveErpData = (data) => {
   lastLocalWriteAt = Date.now();
   writeLocalBackup(data);
+  pendingRemotePayload = data;
 
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-  }
-
-  saveTimer = setTimeout(() => {
-    upsertRemoteState(data).catch((error) => {
-      console.error("Backend save failed, kept local backup.", error);
+  upsertRemoteState(data)
+    .then(() => {
+      if (pendingRemotePayload === data) {
+        pendingRemotePayload = null;
+      }
+      retryDelayMs = 1000;
+    })
+    .catch((error) => {
+      console.error("Backend save failed, keeping retry queue.", error);
+      queueRemoteRetry();
     });
-  }, 50);
 };
