@@ -2295,7 +2295,7 @@ export default function App() {
         <nav style={{flex:1,padding:"10px 10px",overflowY:"auto"}}>
           {displayNav.map(n=>(
             <button key={n.id} onClick={()=>setPage(n.id)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 12px",borderRadius:7,border:"none",background:page===n.id?`${T.amber}14`:"transparent",color:page===n.id?T.amber:T.textSec,cursor:"pointer",textAlign:"left",fontSize:13,fontWeight:page===n.id?600:400,transition:"all .15s",marginBottom:2}}>
-              <span style={{fontSize:14,width:18}}>{n.icon}</span>
+              <span style={{fontSize:10,minWidth:40,padding:"3px 6px",borderRadius:999,border:`1px solid ${page===n.id?`${T.amber}40`:T.border}`,background:page===n.id?`${T.amber}18`:"transparent",color:page===n.id?T.amber:T.textMuted,fontFamily:"'JetBrains Mono', monospace",textAlign:"center",letterSpacing:.3,flexShrink:0}}>{n.icon}</span>
               {n.label}
               {n.id==="orders"&&pendingCnt>0&&<span style={{marginLeft:"auto",background:T.red,color:"#fff",fontSize:10,fontWeight:700,borderRadius:20,padding:"1px 6px"}}>{pendingCnt}</span>}
               {n.id==="sizes"&&<span style={{marginLeft:"auto",background:`${T.purple}22`,color:T.purple,fontSize:9,fontWeight:700,borderRadius:20,padding:"2px 6px",letterSpacing:.3}}>ADMIN</span>}
