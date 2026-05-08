@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { getLastLocalWriteAt, loadErpData, readCachedErpData, saveErpData } from "./lib/erpStorage";
+import { getLastLocalWriteAt, hasPendingRemoteSync, loadErpData, readCachedErpData, saveErpData } from "./lib/erpStorage";
 
 // ── FONTS ──────────────────────────────────────────────────────────────────
 (() => {
@@ -1986,6 +1986,7 @@ const EmployeeView = memo(({data,setData})=>{
   const [tab,setTab]=useState("queue");
   const active=useMemo(()=>data.orders.filter(o=>["pending","in-production","ready-for-delivery"].includes(o.status)),[data.orders]);
   const employeeOrders=useMemo(()=>data.orders.filter(o=>["pending","in-production","ready-for-delivery","delivered"].includes(o.status)),[data.orders]);
+  const employeeStages=["pending","in-production","ready-for-delivery","delivered","cancelled"];
 
   const upd=useCallback((id,status)=>{
     setData(prev=>{const u={...prev,orders:prev.orders.map(o=>o.id===id?{...o,status,...(status==="delivered"?{deliveryDate:today()}:{})}:o)};saveData(u);return u;});
@@ -2038,6 +2039,13 @@ const EmployeeView = memo(({data,setData})=>{
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
                   <div style={{fontSize:11,color:T.textSec}}>{order.orderDate}</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                    {employeeStages.map((stage)=>(
+                      <Btn key={stage} small variant={order.status===stage?"primary":"ghost"} onClick={()=>upd(order.id,stage)}>
+                        {STATUS[stage].label}
+                      </Btn>
+                    ))}
+                  </div>
                   {order.status==="pending"            &&<Btn small variant="blue"    onClick={()=>upd(order.id,"in-production")}>â–¶ Start</Btn>}
                   {order.status==="in-production"      &&<Btn small variant="success" onClick={()=>upd(order.id,"ready-for-delivery")}>✓ Ready</Btn>}
                   {order.status==="ready-for-delivery" &&<Btn small                   onClick={()=>upd(order.id,"delivered")}>🚛 Delivered</Btn>}
@@ -2422,6 +2430,7 @@ export default function App() {
   useEffect(()=>{ dataRef.current = data; },[data]);
 
   const syncSharedData = useCallback(async () => {
+    if (hasPendingRemoteSync()) return;
     if (Date.now() - getLastLocalWriteAt() < 2000) return;
 
     const next = await loadData();

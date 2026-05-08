@@ -30,6 +30,7 @@ let pendingRemotePayload = null;
 let retryDelayMs = 1000;
 
 export const getLastLocalWriteAt = () => lastLocalWriteAt;
+export const hasPendingRemoteSync = () => Boolean(pendingRemotePayload);
 
 const readLocalBackup = () => {
   try {
