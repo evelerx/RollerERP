@@ -417,18 +417,31 @@ const useDebounce = (val, ms=300) => {
   return dv;
 };
 
-const InstallAppButton = memo(({ canInstall, onInstall, showIosHint, isInstalled, compact=false }) => {
+const InstallAppButton = memo(({ canInstall, onInstall, onDismiss, showIosHint, isInstalled, dismissed=false, compact=false }) => {
   if (isInstalled) return null;
+  if (dismissed) return null;
   if (!canInstall && !showIosHint) return null;
 
   return (
     <div style={{
-      position:compact?"static":"fixed",right:16,bottom:16,zIndex:1000,maxWidth:280,
+      position:compact?"relative":"fixed",right:16,bottom:16,zIndex:1000,maxWidth:280,
       background:T.card,border:`1px solid ${T.borderH}`,borderRadius:12,padding:"14px 16px",
       boxShadow:compact?"none":"0 16px 40px rgba(0,0,0,.35)",
       width:compact?"100%":"auto"
     }}>
-      <div className="raj" style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:6}}>
+      {onDismiss && (
+        <button
+          onClick={onDismiss}
+          style={{
+            position:"absolute",top:8,right:8,background:"transparent",border:"none",color:T.textSec,
+            fontSize:16,lineHeight:1,padding:4,cursor:"pointer"
+          }}
+          aria-label="Dismiss download prompt"
+        >
+          x
+        </button>
+      )}
+      <div className="raj" style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:6,paddingRight:20}}>
         Download App
       </div>
       <div style={{fontSize:12,color:T.textSec,lineHeight:1.5,marginBottom:12}}>
@@ -2039,6 +2052,7 @@ export default function App() {
   const [clientName,setClientName]=useState("");
   const [deferredPrompt,setDeferredPrompt]=useState(null);
   const [isInstalled,setIsInstalled]=useState(false);
+  const [installDismissed,setInstallDismissed]=useState(false);
 
   const isIos = typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isStandalone =
@@ -2089,8 +2103,10 @@ export default function App() {
       <InstallAppButton
         canInstall={Boolean(deferredPrompt)}
         onInstall={installApp}
+        onDismiss={()=>setInstallDismissed(true)}
         showIosHint={isIos && !isStandalone}
         isInstalled={isInstalled}
+        dismissed={installDismissed}
       />
     </>
   );
@@ -2101,14 +2117,18 @@ export default function App() {
         onLogin={(r)=>{setRole(r);setPage("dashboard");}}
         canInstall={Boolean(deferredPrompt)}
         onInstall={installApp}
+        onDismiss={()=>setInstallDismissed(true)}
         showIosHint={isIos && !isStandalone}
         isInstalled={isInstalled}
+        dismissed={installDismissed}
       />
       <InstallAppButton
         canInstall={Boolean(deferredPrompt)}
         onInstall={installApp}
+        onDismiss={()=>setInstallDismissed(true)}
         showIosHint={isIos && !isStandalone}
         isInstalled={isInstalled}
+        dismissed={installDismissed}
       />
     </>
   );
@@ -2130,8 +2150,10 @@ export default function App() {
       <InstallAppButton
         canInstall={Boolean(deferredPrompt)}
         onInstall={installApp}
+        onDismiss={()=>setInstallDismissed(true)}
         showIosHint={isIos && !isStandalone}
         isInstalled={isInstalled}
+        dismissed={installDismissed}
       />
     </>
   );
@@ -2153,8 +2175,10 @@ export default function App() {
       <InstallAppButton
         canInstall={Boolean(deferredPrompt)}
         onInstall={installApp}
+        onDismiss={()=>setInstallDismissed(true)}
         showIosHint={isIos && !isStandalone}
         isInstalled={isInstalled}
+        dismissed={installDismissed}
       />
     </>
   );
