@@ -28,6 +28,47 @@ const T = {
   chart:["#f59e0b","#22c55e","#3b82f6","#a78bfa","#ef4444","#06b6d4"],
 };
 
+const BrandLogo = ({ height = 34, wide = false }) => (
+  <img
+    src="/sk-engineering-logo.svg"
+    alt="Shree Krupa Engineering Works"
+    style={{
+      height,
+      width: wide ? "auto" : height * 1.8,
+      objectFit: "contain",
+      display: "block",
+      filter: "drop-shadow(0 2px 8px rgba(0,0,0,.18))",
+    }}
+  />
+);
+
+const sanitizeUiText = (value) => {
+  if (typeof value !== "string") return value;
+
+  return value
+    .replaceAll("â†", "<")
+    .replaceAll("â†’", ">")
+    .replaceAll("Â·", "·")
+    .replaceAll("â€”", "-")
+    .replaceAll("â€¦", "...")
+    .replaceAll("Ã—", "x")
+    .replaceAll("âš ", "!")
+    .replaceAll("â€˜", "'")
+    .replaceAll("â€™", "'")
+    .replaceAll("â€œ", "\"")
+    .replaceAll("â€", "\"")
+    .replaceAll("Ã¢Å¡â„¢", "[PRD]")
+    .replaceAll("Ã¢Å¡â€“", "[SZ]")
+    .replaceAll("ðŸ“‹", "[ORD]")
+    .replaceAll("ðŸ“¦", "[STK]")
+    .replaceAll("ðŸ”©", "[RM]")
+    .replaceAll("ðŸ‘¥", "[CL]")
+    .replaceAll("ðŸ“Š", "[RPT]")
+    .replaceAll("ðŸ‘‘", "[A]")
+    .replaceAll("ðŸ”§", "[E]")
+    .replaceAll("ðŸ­", "[C]");
+};
+
 // ── AUTH (obfuscated — do not expose plaintext) ────────────────────────────
 const ADMIN_PASSWORD = "123ERP";
 const LEGACY_PASSWORDS = ["1234"];
@@ -631,13 +672,20 @@ const LoginScreen = ({onLogin, canInstall=false, onInstall, showIosHint=false, i
   },[step,pass,onLogin]);
 
   const handleKey = useCallback((e)=>{ if(e.key==="Enter") attempt(); },[attempt]);
+  const loginRoles = [
+    {r:"admin", label:"Admin / Owner", sub:"Full access - sizes, pricing, payments", icon:"[A]", color:T.amber},
+    {r:"employee", label:"Employee", sub:"Production queue, orders & stock management", icon:"[E]", color:T.blue},
+    {r:"client", label:"Client Portal", sub:"Browse catalog, place orders, track delivery", icon:"[C]", color:T.green},
+  ];
 
   if(!step) return(
     <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif"}}>
       <div style={{position:"absolute",inset:0,backgroundImage:"radial-gradient(circle at 20% 50%, rgba(245,158,11,.06) 0%, transparent 60%), radial-gradient(circle at 80% 20%, rgba(59,130,246,.05) 0%, transparent 50%)"}}/>
       <div className="fade" style={{width:"100%",maxWidth:440,padding:"40px",position:"relative"}}>
         <div style={{textAlign:"center",marginBottom:36}}>
-          <div style={{fontSize:44,marginBottom:10}}>[ERP]</div>
+          <div style={{display:"flex",justifyContent:"center",marginBottom:14}}>
+            <BrandLogo height={76} wide />
+          </div>
           <h1 className="raj" style={{fontSize:32,fontWeight:700,color:T.text,marginBottom:6}}>Roller ERP</h1>
           <p style={{fontSize:13,color:T.textSec}}>Stone Crusher Conveyor Roller Manufacturing</p>
         </div>
@@ -650,10 +698,10 @@ const LoginScreen = ({onLogin, canInstall=false, onInstall, showIosHint=false, i
             <button key={r} onClick={()=>{setStep(r);setPass("");setError("");}} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"18px 20px",cursor:"pointer",textAlign:"left",transition:"border-color .2s,background .2s",display:"flex",gap:14,alignItems:"center"}}
               onMouseEnter={e=>{e.currentTarget.style.borderColor=color;e.currentTarget.style.background=`${color}08`;}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.card;}}>
-              <span style={{fontSize:28}}>{icon}</span>
+              <span style={{fontSize:28}}>{sanitizeUiText(icon)}</span>
               <div>
                 <div style={{fontWeight:700,color:T.text,fontSize:15}}>{label}</div>
-                <div style={{fontSize:12,color:T.textSec,marginTop:2}}>{sub}</div>
+                <div style={{fontSize:12,color:T.textSec,marginTop:2}}>{sanitizeUiText(sub)}</div>
               </div>
               <span style={{marginLeft:"auto",color:T.textMuted,fontSize:18}}>→</span>
             </button>
@@ -2085,6 +2133,25 @@ export default function App() {
     };
   },[]);
 
+  useEffect(()=>{
+    if (typeof document === "undefined") return;
+
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const changed = [];
+
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      const nextValue = sanitizeUiText(node.nodeValue || "");
+      if (nextValue !== node.nodeValue) {
+        changed.push([node, nextValue]);
+      }
+    }
+
+    changed.forEach(([node, nextValue]) => {
+      node.nodeValue = nextValue;
+    });
+  },[data, role, page, clientName, installDismissed]);
+
   const installApp = async () => {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
@@ -2139,7 +2206,7 @@ export default function App() {
     <div style={{minHeight:"100vh",background:T.bg}}>
       <div style={{background:T.surface,borderBottom:`1px solid ${T.border}`,padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:56}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <span style={{fontSize:20}}>[ERP]</span>
+          <BrandLogo height={30} wide />
           <span className="raj" style={{fontSize:18,fontWeight:700,color:T.text}}>Roller ERP</span>
           <span style={{padding:"2px 10px",background:"rgba(34,197,94,.12)",color:T.green,borderRadius:20,fontSize:11,fontWeight:700}}>CLIENT PORTAL</span>
         </div>
@@ -2164,7 +2231,7 @@ export default function App() {
     <div style={{minHeight:"100vh",background:T.bg}}>
       <div style={{background:T.surface,borderBottom:`1px solid ${T.border}`,padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:56}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <span style={{fontSize:20}}>[ERP]</span>
+          <BrandLogo height={30} wide />
           <span className="raj" style={{fontSize:18,fontWeight:700,color:T.text}}>Roller ERP</span>
           <span style={{padding:"2px 10px",background:`${T.blue}18`,color:T.blue,borderRadius:20,fontSize:11,fontWeight:700}}>EMPLOYEE</span>
         </div>
@@ -2197,6 +2264,16 @@ export default function App() {
     sizes:     <SizeManager data={data} setData={setData}/>,
     reports:   <Reports    data={data} setData={setData}/>,
   };
+  const displayNav = [
+    {id:"dashboard", label:"Dashboard",      icon:"*"},
+    {id:"orders",    label:"Order Book",     icon:"[ORD]"},
+    {id:"production",label:"Production",     icon:"[PRD]"},
+    {id:"stock",     label:"Stock Mgmt",     icon:"[STK]"},
+    {id:"rawmat",    label:"Raw Materials",  icon:"[RM]"},
+    {id:"clients",   label:"Clients",        icon:"[CL]"},
+    {id:"sizes",     label:"Sizes & Pricing",icon:"[SZ]"},
+    {id:"reports",   label:"Reports",        icon:"[RPT]"},
+  ];
 
   return(
     <>
@@ -2204,7 +2281,7 @@ export default function App() {
       <div style={{width:224,background:T.surface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",flexShrink:0}}>
         <div style={{padding:"18px 18px",borderBottom:`1px solid ${T.border}`}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-            <span style={{fontSize:22}}>[ERP]</span>
+            <BrandLogo height={34} wide />
             <div>
               <div className="raj" style={{fontSize:18,fontWeight:700,color:T.text,lineHeight:1}}>Roller ERP</div>
               <div style={{fontSize:10,color:T.textSec}}>Manufacturing System</div>
@@ -2216,7 +2293,7 @@ export default function App() {
           </div>
         </div>
         <nav style={{flex:1,padding:"10px 10px",overflowY:"auto"}}>
-          {ADMIN_NAV.map(n=>(
+          {displayNav.map(n=>(
             <button key={n.id} onClick={()=>setPage(n.id)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 12px",borderRadius:7,border:"none",background:page===n.id?`${T.amber}14`:"transparent",color:page===n.id?T.amber:T.textSec,cursor:"pointer",textAlign:"left",fontSize:13,fontWeight:page===n.id?600:400,transition:"all .15s",marginBottom:2}}>
               <span style={{fontSize:14,width:18}}>{n.icon}</span>
               {n.label}
