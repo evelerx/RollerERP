@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { getLastLocalWriteAt, hasPendingRemoteSync, loadErpData, readCachedErpData, saveErpData } from "./lib/erpStorage";
+import { hasPendingRemoteSync, loadErpData, readCachedErpData, saveErpData } from "./lib/erpStorage";
 
 // ── FONTS ──────────────────────────────────────────────────────────────────
 (() => {
@@ -2417,7 +2417,6 @@ export default function App() {
 
   const syncSharedData = useCallback(async () => {
     if (hasPendingRemoteSync()) return;
-    if (Date.now() - getLastLocalWriteAt() < 2000) return;
 
     const next = await loadData();
     const current = dataRef.current;
