@@ -119,8 +119,20 @@ export const ensureSchema = async () => {
       phone text,
       email text,
       address text,
-      gst text
+      gst text,
+      account_enabled boolean not null default false,
+      account_password_hash text,
+      account_created_at timestamptz,
+      account_last_login_at timestamptz
     )
+  `);
+
+  await pool.query(`
+    alter table public.erp_clients
+    add column if not exists account_enabled boolean not null default false,
+    add column if not exists account_password_hash text,
+    add column if not exists account_created_at timestamptz,
+    add column if not exists account_last_login_at timestamptz
   `);
 };
 
@@ -257,8 +269,11 @@ const insertClients = async (client, clients = []) => {
   for (const row of clients) {
     await client.query(
       `
-        insert into public.erp_clients (id, name, phone, email, address, gst)
-        values ($1, $2, $3, $4, $5, $6)
+        insert into public.erp_clients (
+          id, name, phone, email, address, gst,
+          account_enabled, account_password_hash, account_created_at, account_last_login_at
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       `,
       [
         row.id,
@@ -267,6 +282,10 @@ const insertClients = async (client, clients = []) => {
         row.email || null,
         row.address || null,
         row.gst || null,
+        Boolean(row.accountEnabled),
+        row.accountPasswordHash || null,
+        row.accountCreatedAt || null,
+        row.accountLastLoginAt || null,
       ]
     );
   }

@@ -157,7 +157,25 @@ const today  = () => new Date().toISOString().split("T")[0];
 const genId  = (p) => `${p}-${Date.now().toString(36).toUpperCase().slice(-6)}`;
 const NOTIF_ADMIN = "admin";
 const NOTIF_EMPLOYEE = "employee";
+const CLIENT_ACCOUNT_SESSION_KEY = "roller_client_account_v1";
 const normalizePhone = (value) => String(value || "").replace(/\D/g, "");
+const hashClientSecretFallback = (value) => {
+  let hash = 2166136261;
+  for (const char of String(value || "")) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `h${(hash >>> 0).toString(16)}`;
+};
+const hashClientSecret = async (value) => {
+  const normalized = String(value || "").trim();
+  if (typeof window !== "undefined" && window.crypto?.subtle && typeof TextEncoder !== "undefined") {
+    const bytes = new TextEncoder().encode(normalized);
+    const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+  return hashClientSecretFallback(normalized);
+};
 const getSz  = (sizes, code) => (sizes||[]).find(s=>s.code===code) || {};
 const getRMT = (id) => RM_TYPES.find(r=>r.id===id) || {};
 const isDue  = (d) => d && d < today() ? true : false;
@@ -2070,6 +2088,12 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
   const [submitted,setSubmitted]=useState(false);
   const [trackId,setTrackId]=useState("");
   const [accountPhoneInput,setAccountPhoneInput]=useState(clientPhone || "");
+  const [accountMode,setAccountMode]=useState("login");
+  const [authBusy,setAuthBusy]=useState(false);
+  const [authError,setAuthError]=useState("");
+  const [authNotice,setAuthNotice]=useState("");
+  const [loginForm,setLoginForm]=useState({phone:clientPhone || "", password:""});
+  const [signupForm,setSignupForm]=useState({name:"",phone:clientPhone || "", email:"", address:"", password:"", confirmPassword:""});
   const [customModal,setCustomModal]=useState(false);
   const [customForm,setCustomForm]=useState({diameter:"",length:"",qty:10,note:""});
   const isMobile = useIsMobile();
@@ -2091,10 +2115,52 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
     return (data.clients || []).find(c=>normalizePhone(c.phone)===normalizedClientPhone) || null;
   },[data.clients, normalizedClientPhone]);
   const trackedOrd=useMemo(()=>data.orders.find(o=>o.id.toLowerCase()===trackId.toLowerCase()),[data.orders,trackId]);
+  const clientFinancials = useMemo(() => {
+    const totalValue = clientOrds.reduce((sum, order) => sum + Number(order.totalValue || 0), 0);
+    const totalPaid = clientOrds.reduce((sum, order) => sum + Number(order.paidAmount || 0), 0);
+    return {
+      totalValue,
+      totalPaid,
+      totalDue: totalValue - totalPaid,
+    };
+  }, [clientOrds]);
 
   useEffect(()=>{
     if (clientPhone) setAccountPhoneInput(clientPhone);
   },[clientPhone]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const savedSession = window.localStorage.getItem(CLIENT_ACCOUNT_SESSION_KEY);
+    if (savedSession && !clientPhone) {
+      setClientPhone(savedSession);
+      setAccountPhoneInput(savedSession);
+      setLoginForm((prev) => ({ ...prev, phone: savedSession }));
+      setSignupForm((prev) => ({ ...prev, phone: savedSession }));
+    }
+  }, [clientPhone, setClientPhone]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (clientPhone) window.localStorage.setItem(CLIENT_ACCOUNT_SESSION_KEY, clientPhone);
+    else window.localStorage.removeItem(CLIENT_ACCOUNT_SESSION_KEY);
+  }, [clientPhone]);
+
+  useEffect(() => {
+    setLoginForm((prev) => ({ ...prev, phone: clientPhone || prev.phone }));
+    setSignupForm((prev) => ({ ...prev, phone: clientPhone || prev.phone }));
+  }, [clientPhone]);
+
+  useEffect(() => {
+    if (!clientAccount) return;
+    setForm((prev) => ({
+      ...prev,
+      name: prev.name || clientAccount.name || "",
+      phone: prev.phone || clientAccount.phone || "",
+      email: prev.email || clientAccount.email || "",
+      address: prev.address || clientAccount.address || "",
+    }));
+  }, [clientAccount]);
 
   const addToCart=(code)=>{
     const sz=activeSizes.find(s=>s.code===code);
@@ -2120,17 +2186,20 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
   const submitOrder=()=>{
     const totalValue=cart.filter(i=>!i.isCustom).reduce((s,i)=>s+i.qty*i.unitPrice,0);
     const items=cart.map(i=>({size:i.size,qty:i.qty,unitPrice:i.unitPrice,isCustom:i.isCustom||false,customLabel:i.customLabel||null}));
+    const normalizedPhone = normalizePhone(form.phone);
+    const existingClient = (data.clients || []).find(c=>normalizePhone(c.phone)===normalizedPhone) || null;
     const order={id:genId("ORD"),clientName:form.name,clientPhone:form.phone,clientEmail:form.email,clientAddress:form.address,items,status:"awaiting-approval",orderDate:today(),dueDate:null,deliveryDate:null,totalValue,paidAmount:0,notes:form.notes+(cart.some(i=>i.isCustom)?" [Contains custom sizes — pricing TBD]":"")};
     setData(prev=>{
-      const normalizedPhone = normalizePhone(form.phone);
       const existingClientIndex = (prev.clients || []).findIndex(c=>normalizePhone(c.phone)===normalizedPhone);
+      const prevClient = existingClientIndex >= 0 ? prev.clients[existingClientIndex] : null;
       const accountClient = {
-        id: existingClientIndex >= 0 ? prev.clients[existingClientIndex].id : genId("C"),
+        ...(prevClient || {}),
+        id: prevClient?.id || genId("C"),
         name: form.name,
         phone: form.phone,
         email: form.email,
         address: form.address,
-        gst: existingClientIndex >= 0 ? (prev.clients[existingClientIndex].gst || "") : "",
+        gst: prevClient?.gst || "",
       };
       const nextClients =
         existingClientIndex >= 0
@@ -2153,9 +2222,13 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
       ]);
       saveData(updated);return updated;
     });
-    setClientName(form.name);
-    setClientPhone(form.phone);
+    if (existingClient?.accountEnabled && existingClient?.accountPasswordHash) {
+      setClientName(form.name);
+      setClientPhone(form.phone);
+    }
     setAccountPhoneInput(form.phone);
+    setLoginForm((prev) => ({ ...prev, phone: form.phone }));
+    setSignupForm((prev) => ({ ...prev, name: form.name, phone: form.phone, email: form.email, address: form.address }));
     setTrackId(order.id);
     setCart([]);setSubmitted(true);setTab("track");
   };
@@ -2165,11 +2238,135 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
     if (!normalizedPhone) return;
     const matchedOrder = (data.orders || []).find(o=>normalizePhone(o.clientPhone)===normalizedPhone);
     const matchedClient = (data.clients || []).find(c=>normalizePhone(c.phone)===normalizedPhone);
+    if (matchedClient?.accountEnabled && matchedClient?.accountPasswordHash) {
+      setAccountMode("login");
+      setLoginForm((prev) => ({ ...prev, phone: matchedClient.phone || accountPhoneInput }));
+      setAuthError("");
+      setAuthNotice("Sign in to open your client account.");
+      return;
+    }
     setClientPhone(accountPhoneInput);
     if (matchedClient?.name) setClientName(matchedClient.name);
     else if (matchedOrder?.clientName) setClientName(matchedOrder.clientName);
     setSubmitted(false);
     setTab("track");
+  };
+
+  const logoutClientAccount = () => {
+    setClientPhone("");
+    setClientName("");
+    setAuthError("");
+    setAuthNotice("Signed out successfully.");
+    setLoginForm((prev) => ({ ...prev, password: "" }));
+  };
+
+  const signupClientAccount = async () => {
+    const normalizedPhone = normalizePhone(signupForm.phone);
+    const password = String(signupForm.password || "");
+    if (!signupForm.name.trim() || !normalizedPhone || password.length < 4) {
+      setAuthError("Enter name, phone, and a password of at least 4 characters.");
+      return;
+    }
+    if (password !== String(signupForm.confirmPassword || "")) {
+      setAuthError("Passwords do not match.");
+      return;
+    }
+
+    setAuthBusy(true);
+    setAuthError("");
+    setAuthNotice("");
+    try {
+      const passwordHash = await hashClientSecret(password);
+      setData((prev) => {
+        const existingIndex = (prev.clients || []).findIndex((client) => normalizePhone(client.phone) === normalizedPhone);
+        const existingClient = existingIndex >= 0 ? prev.clients[existingIndex] : null;
+        if (existingClient?.accountEnabled && existingClient?.accountPasswordHash) {
+          throw new Error("An account already exists for this phone number.");
+        }
+
+        const nextClient = {
+          ...(existingClient || {}),
+          id: existingClient?.id || genId("C"),
+          name: signupForm.name.trim(),
+          phone: signupForm.phone,
+          email: signupForm.email || existingClient?.email || "",
+          address: signupForm.address || existingClient?.address || "",
+          gst: existingClient?.gst || "",
+          accountEnabled: true,
+          accountPasswordHash: passwordHash,
+          accountCreatedAt: existingClient?.accountCreatedAt || new Date().toISOString(),
+          accountLastLoginAt: new Date().toISOString(),
+        };
+
+        const nextClients = existingIndex >= 0
+          ? prev.clients.map((client, index) => index === existingIndex ? nextClient : client)
+          : [...(prev.clients || []), nextClient];
+
+        const updated = { ...prev, clients: nextClients };
+        saveData(updated);
+        return updated;
+      });
+
+      setClientPhone(signupForm.phone);
+      setClientName(signupForm.name.trim());
+      setAccountPhoneInput(signupForm.phone);
+      setLoginForm({ phone: signupForm.phone, password: "" });
+      setSignupForm((prev) => ({ ...prev, password: "", confirmPassword: "" }));
+      setAuthNotice("Account created successfully.");
+      setTab("track");
+    } catch (error) {
+      setAuthError(error.message || "Unable to create account.");
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const loginClientAccount = async () => {
+    const normalizedPhone = normalizePhone(loginForm.phone);
+    const password = String(loginForm.password || "");
+    if (!normalizedPhone || !password) {
+      setAuthError("Enter your registered phone and password.");
+      return;
+    }
+
+    setAuthBusy(true);
+    setAuthError("");
+    setAuthNotice("");
+    try {
+      const client = (data.clients || []).find((row) => normalizePhone(row.phone) === normalizedPhone);
+      if (!client?.accountEnabled || !client?.accountPasswordHash) {
+        throw new Error("No client account found for this phone number.");
+      }
+
+      const passwordHash = await hashClientSecret(password);
+      if (passwordHash !== client.accountPasswordHash) {
+        throw new Error("Incorrect password.");
+      }
+
+      setData((prev) => {
+        const updated = {
+          ...prev,
+          clients: (prev.clients || []).map((row) =>
+            normalizePhone(row.phone) === normalizedPhone
+              ? { ...row, accountLastLoginAt: new Date().toISOString() }
+              : row
+          ),
+        };
+        saveData(updated);
+        return updated;
+      });
+
+      setClientPhone(client.phone || loginForm.phone);
+      setClientName(client.name || "");
+      setAccountPhoneInput(client.phone || loginForm.phone);
+      setLoginForm((prev) => ({ ...prev, password: "" }));
+      setAuthNotice("Signed in successfully.");
+      setTab("track");
+    } catch (error) {
+      setAuthError(error.message || "Unable to sign in.");
+    } finally {
+      setAuthBusy(false);
+    }
   };
 
   return(
@@ -2280,12 +2477,64 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
         <div>
           <SectionHeader title="Track Your Order"/>
           <Card style={{marginBottom:16}}>
-            <div className="raj" style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:10}}>Client Account</div>
-            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr auto",gap:10,alignItems:"end"}}>
-              <Inp label="Registered Phone" value={accountPhoneInput} onChange={setAccountPhoneInput} placeholder="Enter client phone"/>
-              <Btn onClick={openClientAccount} disabled={!normalizePhone(accountPhoneInput)}>Open Account</Btn>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:12,flexWrap:"wrap"}}>
+              <div className="raj" style={{fontSize:15,fontWeight:700,color:T.text}}>Client Account</div>
+              {!!clientAccount && !!normalizedClientPhone && (
+                <Btn small variant="ghost" onClick={logoutClientAccount}>Sign Out</Btn>
+              )}
             </div>
-            <div style={{fontSize:12,color:T.textSec,marginTop:8}}>Any client who ordered once can open full shared history with phone number.</div>
+            {!clientAccount || !normalizedClientPhone ? (
+              <>
+                <div style={{display:"flex",gap:8,marginBottom:12}}>
+                  <button onClick={()=>setAccountMode("login")} style={{padding:"8px 16px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer",border:`1px solid ${accountMode==="login"?T.blue:T.border}`,background:accountMode==="login"?`${T.blue}18`:"transparent",color:accountMode==="login"?T.blue:T.textSec}}>Sign In</button>
+                  <button onClick={()=>setAccountMode("signup")} style={{padding:"8px 16px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer",border:`1px solid ${accountMode==="signup"?T.green:T.border}`,background:accountMode==="signup"?`${T.green}18`:"transparent",color:accountMode==="signup"?T.green:T.textSec}}>Sign Up</button>
+                </div>
+                {accountMode==="login"?(
+                  <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr auto",gap:10,alignItems:"end"}}>
+                    <Inp label="Registered Phone" value={loginForm.phone} onChange={v=>setLoginForm(prev=>({...prev,phone:v}))} placeholder="Enter client phone"/>
+                    <Inp label="Password" type="password" value={loginForm.password} onChange={v=>setLoginForm(prev=>({...prev,password:v}))} placeholder="Enter password"/>
+                    <Btn onClick={loginClientAccount} disabled={authBusy || !normalizePhone(loginForm.phone) || !loginForm.password}>Sign In</Btn>
+                  </div>
+                ):(
+                  <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}>
+                    <Inp label="Name / Company" value={signupForm.name} onChange={v=>setSignupForm(prev=>({...prev,name:v}))}/>
+                    <Inp label="Phone" value={signupForm.phone} onChange={v=>setSignupForm(prev=>({...prev,phone:v}))}/>
+                    <Inp label="Email" value={signupForm.email} onChange={v=>setSignupForm(prev=>({...prev,email:v}))}/>
+                    <Inp label="Address" value={signupForm.address} onChange={v=>setSignupForm(prev=>({...prev,address:v}))}/>
+                    <Inp label="Password" type="password" value={signupForm.password} onChange={v=>setSignupForm(prev=>({...prev,password:v}))}/>
+                    <Inp label="Confirm Password" type="password" value={signupForm.confirmPassword} onChange={v=>setSignupForm(prev=>({...prev,confirmPassword:v}))}/>
+                    <div style={{gridColumn:isMobile?"auto":"1 / -1",display:"flex",justifyContent:"flex-end"}}>
+                      <Btn variant="success" onClick={signupClientAccount} disabled={authBusy || !signupForm.name || !normalizePhone(signupForm.phone) || !signupForm.password || !signupForm.confirmPassword}>Create Account</Btn>
+                    </div>
+                  </div>
+                )}
+                {authError && <div style={{fontSize:12,color:T.red,marginTop:10}}>{authError}</div>}
+                {authNotice && <div style={{fontSize:12,color:T.green,marginTop:10}}>{authNotice}</div>}
+                <div style={{fontSize:12,color:T.textSec,marginTop:8}}>Sign up once to unlock order history, paid amount, and remaining balance on any device.</div>
+              </>
+            ):(
+              <>
+                <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(4,1fr)",gap:10}}>
+                  <div style={{background:T.surface,borderRadius:8,padding:"10px 12px"}}>
+                    <div style={{fontSize:11,color:T.textSec,fontWeight:700}}>TOTAL ORDERS</div>
+                    <div className="mono" style={{fontSize:20,color:T.text,marginTop:4}}>{clientOrds.length}</div>
+                  </div>
+                  <div style={{background:T.surface,borderRadius:8,padding:"10px 12px"}}>
+                    <div style={{fontSize:11,color:T.textSec,fontWeight:700}}>TOTAL BILLED</div>
+                    <div className="mono" style={{fontSize:20,color:T.amber,marginTop:4}}>{INR(clientFinancials.totalValue)}</div>
+                  </div>
+                  <div style={{background:T.surface,borderRadius:8,padding:"10px 12px"}}>
+                    <div style={{fontSize:11,color:T.textSec,fontWeight:700}}>TOTAL PAID</div>
+                    <div className="mono" style={{fontSize:20,color:T.green,marginTop:4}}>{INR(clientFinancials.totalPaid)}</div>
+                  </div>
+                  <div style={{background:T.surface,borderRadius:8,padding:"10px 12px"}}>
+                    <div style={{fontSize:11,color:T.textSec,fontWeight:700}}>BALANCE DUE</div>
+                    <div className="mono" style={{fontSize:20,color:clientFinancials.totalDue>0?T.red:T.green,marginTop:4}}>{INR(clientFinancials.totalDue)}</div>
+                  </div>
+                </div>
+                <div style={{fontSize:12,color:T.textSec,marginTop:10}}>Signed in as {clientAccount.name || clientName} · {clientAccount.phone || clientPhone}</div>
+              </>
+            )}
           </Card>
           {submitted&&(
             <div style={{background:"rgba(34,197,94,.08)",border:"1px solid rgba(34,197,94,.25)",borderRadius:8,padding:"14px 18px",marginBottom:16,display:"flex",gap:12,alignItems:"center"}}>
@@ -2320,18 +2569,22 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
                 </div>
                 <span style={{padding:"4px 10px",borderRadius:20,background:`${T.green}14`,color:T.green,fontSize:11,fontWeight:700}}>ACTIVE</span>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:10}}>
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(4,1fr)",gap:10}}>
                 <div style={{background:T.surface,borderRadius:8,padding:"10px 12px"}}>
                   <div style={{fontSize:11,color:T.textSec,fontWeight:700}}>TOTAL ORDERS</div>
                   <div className="mono" style={{fontSize:20,color:T.text,marginTop:4}}>{clientOrds.length}</div>
                 </div>
                 <div style={{background:T.surface,borderRadius:8,padding:"10px 12px"}}>
-                  <div style={{fontSize:11,color:T.textSec,fontWeight:700}}>ACTIVE</div>
-                  <div className="mono" style={{fontSize:20,color:T.amber,marginTop:4}}>{clientOrds.filter(o=>!["delivered","cancelled"].includes(o.status)).length}</div>
+                  <div style={{fontSize:11,color:T.textSec,fontWeight:700}}>TOTAL BILLED</div>
+                  <div className="mono" style={{fontSize:20,color:T.amber,marginTop:4}}>{INR(clientFinancials.totalValue)}</div>
                 </div>
                 <div style={{background:T.surface,borderRadius:8,padding:"10px 12px"}}>
-                  <div style={{fontSize:11,color:T.textSec,fontWeight:700}}>DELIVERED</div>
-                  <div className="mono" style={{fontSize:20,color:T.green,marginTop:4}}>{clientOrds.filter(o=>o.status==="delivered").length}</div>
+                  <div style={{fontSize:11,color:T.textSec,fontWeight:700}}>TOTAL PAID</div>
+                  <div className="mono" style={{fontSize:20,color:T.green,marginTop:4}}>{INR(clientFinancials.totalPaid)}</div>
+                </div>
+                <div style={{background:T.surface,borderRadius:8,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,color:T.textSec,fontWeight:700}}>BALANCE DUE</div>
+                  <div className="mono" style={{fontSize:20,color:clientFinancials.totalDue>0?T.red:T.green,marginTop:4}}>{INR(clientFinancials.totalDue)}</div>
                 </div>
               </div>
             </Card>
@@ -2345,6 +2598,7 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
                     <div>
                       <div className="mono" style={{fontSize:12,color:T.amber,marginBottom:2}}>{o.id}</div>
                       <div style={{fontSize:12,color:T.textSec}}>{o.orderDate} · {o.items.reduce((s,i)=>s+i.qty,0)} pcs{o.dueDate?` · Due: ${o.dueDate}`:""}</div>
+                      <div style={{fontSize:12,color:T.textSec,marginTop:4}}>Paid: <span className="mono" style={{color:T.green}}>{INR(o.paidAmount || 0)}</span> · Due: <span className="mono" style={{color:(o.totalValue-o.paidAmount)>0?T.red:T.green}}>{INR((o.totalValue || 0) - (o.paidAmount || 0))}</span></div>
                     </div>
                     <Badge status={o.status}/>
                   </div>
