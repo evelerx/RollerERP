@@ -1,4 +1,4 @@
-const CACHE_NAME = "roller-erp-shell-v3";
+const CACHE_NAME = "roller-erp-shell-v4";
 const CORE_ASSETS = ["/", "/manifest.webmanifest", "/favicon.svg", "/app-icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -28,11 +28,7 @@ self.addEventListener("fetch", (event) => {
   if (event.request.mode === "navigate") {
     event.respondWith(
       fetch(event.request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put("/", copy));
-          return response;
-        })
+        .then((response) => response)
         .catch(() => caches.match("/") || caches.match(event.request))
     );
     return;
