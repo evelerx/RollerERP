@@ -668,7 +668,7 @@ const KPI = memo(({label,value,sub,accent})=>(
   </Card>
 ));
 
-const Btn = memo(({children,onClick,variant="primary",style={},small=false,disabled=false})=>{
+const Btn = memo(({children,onClick,variant="primary",style={},small=false,disabled=false,type="button"})=>{
   const V={
     primary:{background:T.amber,color:"#000",border:"none"},
     ghost:{background:"transparent",color:T.text,border:`1px solid ${T.border}`},
@@ -679,7 +679,7 @@ const Btn = memo(({children,onClick,variant="primary",style={},small=false,disab
     orange:{background:"rgba(249,115,22,.15)",color:"#f97316",border:"1px solid rgba(249,115,22,.3)"},
   };
   return(
-    <button onClick={onClick} disabled={disabled} style={{...V[variant],padding:small?"5px 12px":"9px 18px",borderRadius:6,fontSize:small?12:13,fontWeight:600,opacity:disabled?.5:1,cursor:disabled?"not-allowed":"pointer",transition:"opacity .15s",...style}}>{children}</button>
+    <button type={type} onClick={onClick} disabled={disabled} style={{...V[variant],padding:small?"5px 12px":"9px 18px",borderRadius:6,fontSize:small?12:13,fontWeight:600,opacity:disabled?.5:1,cursor:disabled?"not-allowed":"pointer",transition:"opacity .15s",...style}}>{children}</button>
   );
 });
 
@@ -1160,10 +1160,10 @@ const OrderBook = memo(({data,setData,role})=>{
       label:"Review",
       render:(_,r)=>r.status==="awaiting-approval" ? (
         <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-          <Btn small variant="success" onClick={()=>updateStatus(r.id,"pending")}>Approve</Btn>
-          <Btn small variant="danger" onClick={()=>updateStatus(r.id,"cancelled")}>Cancel</Btn>
+          <Btn small variant="success" onClick={(e)=>{ e.stopPropagation(); updateStatus(r.id,"pending"); }}>Approve</Btn>
+          <Btn small variant="danger" onClick={(e)=>{ e.stopPropagation(); updateStatus(r.id,"cancelled"); }}>Cancel</Btn>
           {r.clientPhone && (
-            <a href={`tel:${r.clientPhone}`} style={{textDecoration:"none"}}>
+            <a href={`tel:${r.clientPhone}`} onClick={(e)=>e.stopPropagation()} style={{textDecoration:"none"}}>
               <Btn small variant="blue">Call</Btn>
             </a>
           )}
@@ -1174,7 +1174,7 @@ const OrderBook = memo(({data,setData,role})=>{
     ...(isAdmin?[{
       key:"_delete",
       label:"",
-      render:(_,r)=><Btn small variant="ghost" onClick={()=>deleteOrder(r.id)}>Delete</Btn>,
+      render:(_,r)=><Btn small variant="ghost" onClick={(e)=>{ e.stopPropagation(); deleteOrder(r.id); }}>Delete</Btn>,
     }]:[]),
   ],[deleteOrder, isAdmin, updateStatus]);
 

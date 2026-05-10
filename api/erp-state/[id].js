@@ -22,11 +22,11 @@ const mergeErpState = (current = {}, incoming = {}) => ({
       : current.inventory && typeof current.inventory === "object"
         ? current.inventory
         : {},
-  orders: mergeById(current.orders, incoming.orders),
-  rawMaterials: mergeById(current.rawMaterials, incoming.rawMaterials),
-  stockLogs: mergeById(current.stockLogs, incoming.stockLogs),
-  clients: mergeById(current.clients, incoming.clients),
-  notifications: mergeById(current.notifications, incoming.notifications),
+  orders: Array.isArray(incoming.orders) ? incoming.orders : mergeById(current.orders, incoming.orders),
+  rawMaterials: Array.isArray(incoming.rawMaterials) ? incoming.rawMaterials : mergeById(current.rawMaterials, incoming.rawMaterials),
+  stockLogs: Array.isArray(incoming.stockLogs) ? incoming.stockLogs : mergeById(current.stockLogs, incoming.stockLogs),
+  clients: Array.isArray(incoming.clients) ? incoming.clients : mergeById(current.clients, incoming.clients),
+  notifications: Array.isArray(incoming.notifications) ? incoming.notifications : mergeById(current.notifications, incoming.notifications),
   _erpMeta:
     incoming._erpMeta && typeof incoming._erpMeta === "object"
       ? incoming._erpMeta
