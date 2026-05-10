@@ -203,6 +203,28 @@ const appendNotifications = (state, notifications) => ({
   notifications: [...(state.notifications || []), ...notifications],
 });
 
+const buildSyncFingerprint = (state) => JSON.stringify({
+  serverUpdatedAt: Number(state?._erpMeta?.serverUpdatedAt || 0),
+  sizes: (state?.sizes || [])
+    .map((item) => `${item.code}|${item.price || 0}|${item.cost || 0}|${item.active === false ? 0 : 1}`)
+    .sort(),
+  orders: (state?.orders || [])
+    .map((item) => `${item.id}|${item.status || ""}|${item.totalValue || 0}|${item.paidAmount || 0}|${item.deliveryDate || ""}|${Array.isArray(item.items) ? item.items.length : 0}`)
+    .sort(),
+  rawMaterials: (state?.rawMaterials || [])
+    .map((item) => `${item.id}|${item.status || ""}|${item.totalCost || 0}|${item.paidAmount || 0}`)
+    .sort(),
+  clients: (state?.clients || [])
+    .map((item) => `${item.id}|${item.phone || ""}|${item.email || ""}|${item.accountEnabled ? 1 : 0}`)
+    .sort(),
+  notifications: (state?.notifications || [])
+    .map((item) => `${item.id}|${item.read ? 1 : 0}|${item.orderId || ""}`)
+    .sort(),
+  inventory: Object.entries(state?.inventory || {})
+    .map(([key, value]) => `${key}|${Number(value || 0)}`)
+    .sort(),
+});
+
 const getMonthlyStats = (sizes, orders) => {
   const map = {};
   (orders||[]).forEach(o => {
@@ -2676,8 +2698,10 @@ export default function App() {
     const current = dataRef.current;
     const currentVersion = Number(current?._erpMeta?.serverUpdatedAt || 0);
     const nextVersion = Number(next?._erpMeta?.serverUpdatedAt || 0);
+    const currentFingerprint = buildSyncFingerprint(current);
+    const nextFingerprint = buildSyncFingerprint(next);
 
-    if (!current || currentVersion !== nextVersion) {
+    if (!current || currentVersion !== nextVersion || currentFingerprint !== nextFingerprint) {
       setData(next);
     }
   },[]);
@@ -2697,18 +2721,30 @@ export default function App() {
       }
     };
 
+    const onPageShow = () => {
+      syncSharedData();
+    };
+
+    const onOnline = () => {
+      syncSharedData();
+    };
+
     const intervalId = window.setInterval(() => {
       if (document.visibilityState === "visible") {
         syncSharedData();
       }
-    }, 1500);
+    }, 1000);
 
     window.addEventListener("focus", onFocus);
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   },[syncSharedData]);
