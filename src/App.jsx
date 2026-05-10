@@ -2420,8 +2420,16 @@ export default function App() {
 
     const next = await loadData();
     const current = dataRef.current;
+    const currentVersion = Math.max(
+      Number(current?._erpMeta?.serverUpdatedAt || 0),
+      Number(current?._erpMeta?.localUpdatedAt || 0)
+    );
+    const nextVersion = Math.max(
+      Number(next?._erpMeta?.serverUpdatedAt || 0),
+      Number(next?._erpMeta?.localUpdatedAt || 0)
+    );
 
-    if (!current || JSON.stringify(current) !== JSON.stringify(next)) {
+    if (!current || currentVersion !== nextVersion) {
       setData(next);
     }
   },[]);
