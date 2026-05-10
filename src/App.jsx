@@ -2674,14 +2674,8 @@ export default function App() {
 
     const next = await loadData();
     const current = dataRef.current;
-    const currentVersion = Math.max(
-      Number(current?._erpMeta?.serverUpdatedAt || 0),
-      Number(current?._erpMeta?.localUpdatedAt || 0)
-    );
-    const nextVersion = Math.max(
-      Number(next?._erpMeta?.serverUpdatedAt || 0),
-      Number(next?._erpMeta?.localUpdatedAt || 0)
-    );
+    const currentVersion = Number(current?._erpMeta?.serverUpdatedAt || 0);
+    const nextVersion = Number(next?._erpMeta?.serverUpdatedAt || 0);
 
     if (!current || currentVersion !== nextVersion) {
       setData(next);

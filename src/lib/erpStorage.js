@@ -2,7 +2,7 @@ const LOCAL_STORAGE_KEY = "roller_erp_v4";
 const PRIMARY_RECORD_ID = "main";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 const ERP_STATE_ENDPOINT = `${API_BASE_URL}/api/erp-state/${PRIMARY_RECORD_ID}`;
-const REMOTE_TIMEOUT_MS = 2000;
+const REMOTE_TIMEOUT_MS = 8000;
 
 const DEMO_ORDER_IDS = new Set([
   "ORD-001","ORD-002","ORD-003","ORD-004","ORD-005","ORD-006","ORD-007",
@@ -57,6 +57,40 @@ const getLocalUpdatedAt = (data) => {
 
 const getServerUpdatedAt = (data) => Number(data?._erpMeta?.serverUpdatedAt || 0) || 0;
 const isDirty = (data) => Boolean(data?._erpMeta?.dirty);
+
+const mergeById = (base = [], incoming = []) => {
+  const map = new Map();
+
+  [...(Array.isArray(base) ? base : []), ...(Array.isArray(incoming) ? incoming : [])].forEach((item) => {
+    if (!item || typeof item !== "object" || !item.id) return;
+    map.set(item.id, item);
+  });
+
+  return Array.from(map.values());
+};
+
+const mergeErpState = (current = {}, incoming = {}) => ({
+  ...current,
+  ...incoming,
+  sizes: Array.isArray(incoming.sizes) ? incoming.sizes : Array.isArray(current.sizes) ? current.sizes : [],
+  inventory:
+    incoming.inventory && typeof incoming.inventory === "object"
+      ? incoming.inventory
+      : current.inventory && typeof current.inventory === "object"
+        ? current.inventory
+        : {},
+  orders: mergeById(current.orders, incoming.orders),
+  rawMaterials: mergeById(current.rawMaterials, incoming.rawMaterials),
+  stockLogs: mergeById(current.stockLogs, incoming.stockLogs),
+  clients: mergeById(current.clients, incoming.clients),
+  notifications: mergeById(current.notifications, incoming.notifications),
+  _erpMeta:
+    incoming._erpMeta && typeof incoming._erpMeta === "object"
+      ? incoming._erpMeta
+      : current._erpMeta && typeof current._erpMeta === "object"
+        ? current._erpMeta
+        : undefined,
+});
 
 const stampErpData = (data, timestamp = Date.now()) => {
   if (!data || typeof data !== "object") {
@@ -146,6 +180,37 @@ const sanitizeErpData = (data, buildSeed) => {
   };
 };
 
+const prepareDirtyLocalSync = (localData, remoteData, buildSeed) => {
+  const localServerUpdatedAt = getServerUpdatedAt(localData);
+  const localUpdatedAt = getLocalUpdatedAt(localData);
+  const remoteServerUpdatedAt = getServerUpdatedAt(remoteData);
+  const hasUnsyncedLocalChanges = isDirty(localData) && localUpdatedAt > localServerUpdatedAt;
+
+  if (!hasUnsyncedLocalChanges) {
+    return {
+      action: "use-remote",
+      payload: remoteData,
+    };
+  }
+
+  if (remoteServerUpdatedAt > localServerUpdatedAt && localUpdatedAt <= remoteServerUpdatedAt) {
+    return {
+      action: "use-remote",
+      payload: remoteData,
+    };
+  }
+
+  const mergedPayload = sanitizeErpData(
+    mergeErpState(remoteData, localData),
+    buildSeed
+  );
+
+  return {
+    action: "push-merged",
+    payload: stampErpData(mergedPayload, localUpdatedAt || Date.now()),
+  };
+};
+
 export const readCachedErpData = (buildSeed) =>
   sanitizeErpData(readLocalBackup(), buildSeed);
 
@@ -204,32 +269,45 @@ export const loadErpData = async (buildSeed) => {
 
   try {
     const remoteData = await fetchRemoteState();
-    if (isDirty(localData)) {
-      const remoteRow = await upsertRemoteState(localData);
-      const syncedLocal = applyServerMeta(localData, remoteRow?.updated_at);
-      writeLocalBackup(syncedLocal);
-      pendingRemotePayload = null;
-      return syncedLocal;
-    }
-
     if (remoteData?.payload) {
       const sanitizedRemote = applyServerMeta(
         sanitizeErpData(remoteData.payload, buildSeed),
         remoteData.updated_at
       );
 
+      if (isDirty(localData)) {
+        const resolution = prepareDirtyLocalSync(localData, sanitizedRemote, buildSeed);
+
+        if (resolution.action === "use-remote") {
+          writeLocalBackup(sanitizedRemote);
+          pendingRemotePayload = null;
+          return sanitizedRemote;
+        }
+
+        const remoteRow = await upsertRemoteState(resolution.payload);
+        const syncedMerged = applyServerMeta(resolution.payload, remoteRow?.updated_at);
+        writeLocalBackup(syncedMerged);
+        pendingRemotePayload = null;
+        return syncedMerged;
+      }
+
       writeLocalBackup(sanitizedRemote);
       if (JSON.stringify(sanitizedRemote) !== JSON.stringify(remoteData.payload)) {
         const normalizedRow = await upsertRemoteState(sanitizedRemote);
-        return applyServerMeta(sanitizedRemote, normalizedRow?.updated_at);
+        const syncedRemote = applyServerMeta(sanitizedRemote, normalizedRow?.updated_at);
+        writeLocalBackup(syncedRemote);
+        return syncedRemote;
       }
       return sanitizedRemote;
     }
 
-    const initialData = localData;
+    const initialData = isDirty(localData)
+      ? localData
+      : stampErpData(localData, Date.now());
     const remoteRow = await upsertRemoteState(initialData);
     const syncedInitial = applyServerMeta(initialData, remoteRow?.updated_at);
     writeLocalBackup(syncedInitial);
+    pendingRemotePayload = null;
     return syncedInitial;
   } catch (error) {
     console.error("Backend load failed, using local backup instead.", error);
