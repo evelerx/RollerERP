@@ -203,6 +203,54 @@ const appendNotifications = (state, notifications) => ({
   notifications: [...(state.notifications || []), ...notifications],
 });
 
+const getClientNotificationRole = (phone) => `client:${normalizePhone(phone)}`;
+
+const buildClientStatusNotification = (order, status) => {
+  const role = getClientNotificationRole(order?.clientPhone);
+  if (!normalizePhone(order?.clientPhone)) return null;
+
+  const variants = {
+    "awaiting-approval": {
+      title: "Order registered",
+      message: `Your order ${order.id} was registered and is waiting for admin confirmation.`,
+    },
+    "pending": {
+      title: "Order approved",
+      message: `Your order ${order.id} has been approved and added to the production queue.`,
+    },
+    "in-production": {
+      title: "Production started",
+      message: `Work has started on your order ${order.id}.`,
+    },
+    "ready-for-delivery": {
+      title: "Ready for delivery",
+      message: `Your order ${order.id} is ready for delivery dispatch.`,
+    },
+    "delivered": {
+      title: "Order delivered",
+      message: `Your order ${order.id} has been marked delivered.`,
+    },
+    "cancelled": {
+      title: "Order cancelled",
+      message: `Your order ${order.id} has been cancelled. Contact admin if you need help.`,
+    },
+    "rejected": {
+      title: "Order rejected",
+      message: `Your order ${order.id} was rejected. Please contact admin for clarification.`,
+    },
+  };
+
+  const variant = variants[status];
+  if (!variant) return null;
+
+  return createNotification({
+    role,
+    title: variant.title,
+    message: variant.message,
+    orderId: order.id,
+  });
+};
+
 const buildSyncFingerprint = (state) => JSON.stringify({
   serverUpdatedAt: Number(state?._erpMeta?.serverUpdatedAt || 0),
   sizes: (state?.sizes || [])
@@ -988,6 +1036,7 @@ const OrderBook = memo(({data,setData,role})=>{
       const currentOrder = prev.orders.find(o=>o.id===id);
       const orders = prev.orders.map(o=>o.id===id?{...o,status,...(status==="delivered"?{deliveryDate:today()}:{})}:o);
       let updated = { ...prev, orders };
+      const clientNotification = currentOrder ? buildClientStatusNotification(currentOrder, status) : null;
 
       if (currentOrder?.status === "awaiting-approval" && status === "pending") {
         updated = appendNotifications(updated, [
@@ -1000,7 +1049,7 @@ const OrderBook = memo(({data,setData,role})=>{
         ]);
       }
 
-      if (currentOrder?.status === "awaiting-approval" && status === "cancelled") {
+      if (currentOrder?.status === "awaiting-approval" && (status === "cancelled" || status === "rejected")) {
         updated = appendNotifications(updated, [
           createNotification({
             role: NOTIF_ADMIN,
@@ -1011,6 +1060,10 @@ const OrderBook = memo(({data,setData,role})=>{
         ]);
       }
 
+      if (clientNotification) {
+        updated = appendNotifications(updated, [clientNotification]);
+      }
+
       saveData(updated);return updated;
     });
     setDetail(d=>d?.id===id?{...d,status}:d);
@@ -1018,7 +1071,18 @@ const OrderBook = memo(({data,setData,role})=>{
 
   const applyPay=useCallback(()=>{
     setData(prev=>{
-      const u={...prev,orders:prev.orders.map(o=>o.id===payModal?{...o,paidAmount:Math.min(o.totalValue,Number(payAmt))}:o)};
+      const currentOrder = prev.orders.find(o=>o.id===payModal);
+      let u={...prev,orders:prev.orders.map(o=>o.id===payModal?{...o,paidAmount:Math.min(o.totalValue,Number(payAmt))}:o)};
+      if (currentOrder && normalizePhone(currentOrder.clientPhone)) {
+        u = appendNotifications(u, [
+          createNotification({
+            role: getClientNotificationRole(currentOrder.clientPhone),
+            title: "Payment updated",
+            message: `Payment for order ${currentOrder.id} was updated to ${INR(Math.min(currentOrder.totalValue, Number(payAmt)))}.`,
+            orderId: currentOrder.id,
+          }),
+        ]);
+      }
       saveData(u);return u;
     });
     setDetail(d=>d?.id===payModal?{...d,paidAmount:Math.min(d.totalValue,Number(payAmt))}:d);
@@ -1809,7 +1873,15 @@ const Production = memo(({data,setData})=>{
   const active=useMemo(()=>data.orders.filter(o=>["pending","in-production","ready-for-delivery"].includes(o.status)),[data.orders]);
 
   const upd=useCallback((id,status)=>{
-    setData(prev=>{const u={...prev,orders:prev.orders.map(o=>o.id===id?{...o,status,...(status==="delivered"?{deliveryDate:today()}:{})}:o)};saveData(u);return u;});
+    setData(prev=>{
+      const currentOrder = prev.orders.find(o=>o.id===id);
+      let u={...prev,orders:prev.orders.map(o=>o.id===id?{...o,status,...(status==="delivered"?{deliveryDate:today()}:{})}:o)};
+      const clientNotification = currentOrder ? buildClientStatusNotification(currentOrder, status) : null;
+      if (clientNotification) {
+        u = appendNotifications(u, [clientNotification]);
+      }
+      saveData(u);return u;
+    });
   },[setData]);
 
   return(
@@ -1993,7 +2065,15 @@ const EmployeeView = memo(({data,setData})=>{
   const employeeStages=["pending","in-production","ready-for-delivery","delivered","cancelled"];
 
   const upd=useCallback((id,status)=>{
-    setData(prev=>{const u={...prev,orders:prev.orders.map(o=>o.id===id?{...o,status,...(status==="delivered"?{deliveryDate:today()}:{})}:o)};saveData(u);return u;});
+    setData(prev=>{
+      const currentOrder = prev.orders.find(o=>o.id===id);
+      let u={...prev,orders:prev.orders.map(o=>o.id===id?{...o,status,...(status==="delivered"?{deliveryDate:today()}:{})}:o)};
+      const clientNotification = currentOrder ? buildClientStatusNotification(currentOrder, status) : null;
+      if (clientNotification) {
+        u = appendNotifications(u, [clientNotification]);
+      }
+      saveData(u);return u;
+    });
   },[setData]);
 
   // Employee order columns — NO value/paid/balance columns
@@ -2146,6 +2226,10 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
       totalDue: totalValue - totalPaid,
     };
   }, [clientOrds]);
+  const clientNotificationRole = useMemo(
+    () => (normalizedClientPhone ? getClientNotificationRole(normalizedClientPhone) : ""),
+    [normalizedClientPhone]
+  );
 
   useEffect(()=>{
     if (clientPhone) setAccountPhoneInput(clientPhone);
@@ -2239,6 +2323,12 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
           role: NOTIF_EMPLOYEE,
           title: "New order registered",
           message: `${order.clientName} submitted a new order. It will enter production after admin approval.`,
+          orderId: order.id,
+        }),
+        createNotification({
+          role: getClientNotificationRole(order.clientPhone),
+          title: "Order received",
+          message: `Your order ${order.id} was received successfully and is waiting for admin approval.`,
           orderId: order.id,
         }),
       ]);
@@ -2498,6 +2588,14 @@ const ClientPortal = memo(({data,setData,clientName,setClientName,clientPhone,se
       {tab==="track"&&(
         <div>
           <SectionHeader title="Track Your Order"/>
+          {!!clientNotificationRole && (
+            <NotificationPanel
+              role={clientNotificationRole}
+              data={data}
+              setData={setData}
+              title="Client Notifications"
+            />
+          )}
           <Card style={{marginBottom:16}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:12,flexWrap:"wrap"}}>
               <div className="raj" style={{fontSize:15,fontWeight:700,color:T.text}}>Client Account</div>
