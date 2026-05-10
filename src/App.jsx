@@ -7,6 +7,7 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { loadErpData, readCachedErpData, saveErpData } from "./lib/erpStorage";
+import { hasRealtimeConfig, subscribeToErpRealtime } from "./lib/realtime";
 
 // ── FONTS ──────────────────────────────────────────────────────────────────
 (() => {
@@ -2781,6 +2782,8 @@ export default function App() {
   const [isInstalled,setIsInstalled]=useState(false);
   const [installDismissed,setInstallDismissed]=useState(false);
   const dataRef = useRef(null);
+  const syncPromiseRef = useRef(null);
+  const realtimeRefreshTimeoutRef = useRef(null);
 
   const isIos = typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isStandalone =
@@ -2790,15 +2793,29 @@ export default function App() {
   useEffect(()=>{ dataRef.current = data; },[data]);
 
   const syncSharedData = useCallback(async () => {
-    const next = await loadData();
-    const current = dataRef.current;
-    const currentVersion = Number(current?._erpMeta?.serverUpdatedAt || 0);
-    const nextVersion = Number(next?._erpMeta?.serverUpdatedAt || 0);
-    const currentFingerprint = buildSyncFingerprint(current);
-    const nextFingerprint = buildSyncFingerprint(next);
+    if (syncPromiseRef.current) {
+      return syncPromiseRef.current;
+    }
 
-    if (!current || currentVersion !== nextVersion || currentFingerprint !== nextFingerprint) {
-      setData(next);
+    syncPromiseRef.current = (async () => {
+      const next = await loadData();
+      const current = dataRef.current;
+      const currentVersion = Number(current?._erpMeta?.serverUpdatedAt || 0);
+      const nextVersion = Number(next?._erpMeta?.serverUpdatedAt || 0);
+      const currentFingerprint = buildSyncFingerprint(current);
+      const nextFingerprint = buildSyncFingerprint(next);
+
+      if (!current || currentVersion !== nextVersion || currentFingerprint !== nextFingerprint) {
+        setData(next);
+      }
+
+      return next;
+    })();
+
+    try {
+      return await syncPromiseRef.current;
+    } finally {
+      syncPromiseRef.current = null;
     }
   },[]);
 
@@ -2829,7 +2846,7 @@ export default function App() {
       if (document.visibilityState === "visible") {
         syncSharedData();
       }
-    }, 1000);
+    }, hasRealtimeConfig ? 15000 : 1000);
 
     window.addEventListener("focus", onFocus);
     window.addEventListener("pageshow", onPageShow);
@@ -2844,6 +2861,27 @@ export default function App() {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   },[syncSharedData]);
+
+  useEffect(() => {
+    if (!hasRealtimeConfig) return undefined;
+
+    const unsubscribe = subscribeToErpRealtime(() => {
+      if (realtimeRefreshTimeoutRef.current) {
+        window.clearTimeout(realtimeRefreshTimeoutRef.current);
+      }
+
+      realtimeRefreshTimeoutRef.current = window.setTimeout(() => {
+        syncSharedData();
+      }, 80);
+    });
+
+    return () => {
+      if (realtimeRefreshTimeoutRef.current) {
+        window.clearTimeout(realtimeRefreshTimeoutRef.current);
+      }
+      unsubscribe();
+    };
+  }, [syncSharedData]);
 
   useEffect(()=>{ setIsInstalled(Boolean(isStandalone)); },[isStandalone]);
 

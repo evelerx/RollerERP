@@ -24,3 +24,16 @@ for update
 to anon
 using (true)
 with check (true);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'erp_state'
+  ) then
+    alter publication supabase_realtime add table public.erp_state;
+  end if;
+end $$;
