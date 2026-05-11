@@ -137,15 +137,142 @@ const RM_STATUS = {
 const PAGE_SIZE = 50; // rows per page for performance
 
 // ── SEED DATA ──────────────────────────────────────────────────────────────
-const buildSeed = () => ({
-  sizes: [],
-  orders: [],
-  rawMaterials: [],
-  inventory: {},
-  stockLogs: [],
-  clients: [],
-  notifications: [],
+const demoDate = (days) => {
+  const value = new Date();
+  value.setDate(value.getDate() + days);
+  return value.toISOString().split("T")[0];
+};
+
+const createDemoState = () => ({
+  sizes: DEFAULT_SIZES.map((size) => ({ ...size })),
+  orders: [
+    {
+      id: "ORD-WSYY52",
+      clientName: "Nihar Industries",
+      clientPhone: "9823241892",
+      clientEmail: "nihar.lakhani23@pcu.edu.in",
+      clientAddress: "Nashik, Maharashtra",
+      items: [
+        { size: "159x530", qty: 40, unitPrice: 2450 },
+        { size: "127x530", qty: 60, unitPrice: 1850 },
+      ],
+      status: "delivered",
+      orderDate: demoDate(-18),
+      dueDate: demoDate(-8),
+      deliveryDate: demoDate(-6),
+      totalValue: 209000,
+      paidAmount: 209000,
+      notes: "Urgent dispatch completed.",
+    },
+    {
+      id: "ORD-WU0XNU",
+      clientName: "Shree Conveyor Works",
+      clientPhone: "9876543210",
+      clientEmail: "purchase@shreeconveyor.in",
+      clientAddress: "Pune, Maharashtra",
+      items: [
+        { size: "102x530", qty: 80, unitPrice: 1400 },
+        { size: "102x465", qty: 60, unitPrice: 1250 },
+      ],
+      status: "in-production",
+      orderDate: demoDate(-9),
+      dueDate: demoDate(4),
+      deliveryDate: null,
+      totalValue: 187000,
+      paidAmount: 90000,
+      notes: "Production batch 2 in progress.",
+    },
+    {
+      id: "ORD-AXP412",
+      clientName: "Krishna Minerals",
+      clientPhone: "9890123456",
+      clientEmail: "ops@krishnaminerals.in",
+      clientAddress: "Satara, Maharashtra",
+      items: [
+        { size: "89x465", qty: 60, unitPrice: 950 },
+      ],
+      status: "awaiting-approval",
+      orderDate: demoDate(-1),
+      dueDate: demoDate(10),
+      deliveryDate: null,
+      totalValue: 57000,
+      paidAmount: 0,
+      notes: "Awaiting admin call confirmation.",
+    },
+    {
+      id: "ORD-LM908K",
+      clientName: "Apex Crushers",
+      clientPhone: "9765432109",
+      clientEmail: "projects@apexcrushers.com",
+      clientAddress: "Indore, Madhya Pradesh",
+      items: [
+        { size: "127x465", qty: 50, unitPrice: 1650 },
+        { size: "89x380", qty: 40, unitPrice: 850 },
+      ],
+      status: "ready-for-delivery",
+      orderDate: demoDate(-7),
+      dueDate: demoDate(1),
+      deliveryDate: null,
+      totalValue: 116500,
+      paidAmount: 50000,
+      notes: "Packed and waiting for dispatch vehicle.",
+    },
+    {
+      id: "ORD-QR551P",
+      clientName: "Balaji Aggregate Systems",
+      clientPhone: "9012345678",
+      clientEmail: "stores@balajiaggregate.in",
+      clientAddress: "Nagpur, Maharashtra",
+      items: [
+        { size: "102x380", qty: 70, unitPrice: 1100 },
+      ],
+      status: "pending",
+      orderDate: demoDate(-3),
+      dueDate: demoDate(6),
+      deliveryDate: null,
+      totalValue: 77000,
+      paidAmount: 25000,
+      notes: "Pending production slot.",
+    },
+  ],
+  rawMaterials: [
+    { id: "RM-DEMO-001", type: "pipes", supplier: "Mahalaxmi Steel", qty: 120, unitCost: 800, totalCost: 96000, paidAmount: 50000, orderDate: demoDate(-14), receivedDate: demoDate(-10), status: "received" },
+    { id: "RM-DEMO-002", type: "bearings", supplier: "SKF Traders", qty: 300, unitCost: 180, totalCost: 54000, paidAmount: 54000, orderDate: demoDate(-12), receivedDate: demoDate(-9), status: "received" },
+    { id: "RM-DEMO-003", type: "shaft", supplier: "Prime Rod Depot", qty: 75, unitCost: 646.67, totalCost: 48500, paidAmount: 20000, orderDate: demoDate(-8), receivedDate: null, status: "partial" },
+    { id: "RM-DEMO-004", type: "sleeves", supplier: "Industrial Sleeve Co.", qty: 220, unitCost: 95.45, totalCost: 21000, paidAmount: 10000, orderDate: demoDate(-5), receivedDate: null, status: "ordered" },
+  ],
+  inventory: {
+    "89x380": 48,
+    "89x465": 64,
+    "89x530": 35,
+    "102x380": 52,
+    "102x465": 72,
+    "102x530": 44,
+    "127x465": 39,
+    "127x530": 56,
+    "159x465": 28,
+    "159x530": 80,
+  },
+  stockLogs: [
+    { id: "LOG-DEMO-001", type: "add", size: "89x465", qty: 64, note: "Finished lot received", orderId: null, date: demoDate(-11) },
+    { id: "LOG-DEMO-002", type: "add", size: "102x465", qty: 72, note: "Warehouse stock update", orderId: null, date: demoDate(-9) },
+    { id: "LOG-DEMO-003", type: "dispatch", size: "159x530", qty: 40, note: "Dispatch for delivered order", orderId: "ORD-WSYY52", date: demoDate(-6) },
+  ],
+  clients: [
+    { id: "CL-DEMO-001", name: "Nihar Industries", phone: "9823241892", email: "nihar.lakhani23@pcu.edu.in", address: "Nashik, Maharashtra", gst: "27ABCDE1234F1Z5", accountEnabled: true },
+    { id: "CL-DEMO-002", name: "Shree Conveyor Works", phone: "9876543210", email: "purchase@shreeconveyor.in", address: "Pune, Maharashtra", gst: "27AACCS7788J1Z9", accountEnabled: false },
+    { id: "CL-DEMO-003", name: "Krishna Minerals", phone: "9890123456", email: "ops@krishnaminerals.in", address: "Satara, Maharashtra", gst: "27AAXPK9988Q1Z7", accountEnabled: false },
+    { id: "CL-DEMO-004", name: "Apex Crushers", phone: "9765432109", email: "projects@apexcrushers.com", address: "Indore, Madhya Pradesh", gst: "23AAICA4567D1ZU", accountEnabled: false },
+    { id: "CL-DEMO-005", name: "Balaji Aggregate Systems", phone: "9012345678", email: "stores@balajiaggregate.in", address: "Nagpur, Maharashtra", gst: "27AABCB2345H1ZT", accountEnabled: false },
+  ],
+  notifications: [
+    { id: "NTF-DEMO-001", role: "admin", title: "New order awaiting approval", message: "Krishna Minerals placed a new order that needs confirmation.", orderId: "ORD-AXP412", createdAt: new Date().toISOString(), read: false },
+    { id: "NTF-DEMO-002", role: "employee", title: "Order approved for production", message: "Shree Conveyor Works order is active on the floor.", orderId: "ORD-WU0XNU", createdAt: new Date().toISOString(), read: false },
+    { id: "NTF-DEMO-003", role: "client:9876543210", title: "Production started", message: "Work has started on your order ORD-WU0XNU.", orderId: "ORD-WU0XNU", createdAt: new Date().toISOString(), read: false },
+  ],
 });
+
+const buildSeed = () => createDemoState();
 
 // ── STORAGE (Supabase + local fallback) ───────────────────────────
 const loadData = async () => loadErpData(buildSeed);
@@ -1959,6 +2086,16 @@ const Reports = memo(({data,setData})=>{
   };
 
   const triggerImport=()=>importRef.current?.click();
+  const loadDemoData=()=>{
+    const confirmed = typeof window === "undefined" ? true : window.confirm("Load full demo data into the ERP? This will replace the current data.");
+    if (!confirmed) return;
+    const demo = createDemoState();
+    setData(demo);
+    saveData(demo);
+    if (typeof window !== "undefined") {
+      window.alert("Demo data loaded successfully.");
+    }
+  };
   const onImport=async(e)=>{
     const file=e.target.files?.[0];
     if(!file) return;
@@ -1992,6 +2129,7 @@ const Reports = memo(({data,setData})=>{
             </div>
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <Btn variant="orange" onClick={loadDemoData}>Load Demo Data</Btn>
             <Btn variant="blue" onClick={()=>exportPdfReport(data)}>Export PDF</Btn>
             <Btn variant="purple" onClick={()=>exportWordReport(data)}>Export Word</Btn>
             <Btn variant="ghost" onClick={()=>exportJsonBackup(data)}>Export Backup</Btn>
