@@ -26,6 +26,10 @@ export const getPool = () => {
 };
 
 export const ensureSchema = async () => {
+  // Production uses a reviewed Supabase migration and a least-privilege server role.
+  // Avoid requiring schema-creation privileges on every live request.
+  if (process.env.DATABASE_SCHEMA_MANAGED === "true") return;
+
   const pool = getPool();
   if (!pool) return;
 

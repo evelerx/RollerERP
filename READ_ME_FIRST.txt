@@ -18,7 +18,7 @@ FIRST TIME SETUP (do this once):
 
 DAILY USE (after first setup):
 --------------------------------
-- Double-click "Roller ERP" on your Desktop
+- Double-click "Roller ERP" on your Desktop, or START_ERP.bat in this folder
 - Browser opens with your app in a few seconds
 - To close: just close the black command window
 

@@ -8,6 +8,8 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { loadErpData, readCachedErpData, saveErpData } from "./lib/erpStorage";
 import { hasRealtimeConfig, subscribeToErpRealtime } from "./lib/realtime";
+import EmployeeManagement from "./features/EmployeeManagement";
+import DocumentsBilling from "./features/DocumentsBilling";
 
 // ── FONTS ──────────────────────────────────────────────────────────────────
 (() => {
@@ -17,16 +19,16 @@ import { hasRealtimeConfig, subscribeToErpRealtime } from "./lib/realtime";
   l.href = "https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap";
   document.head.appendChild(l);
   const s = document.createElement("style");
-  s.textContent = `*{box-sizing:border-box;margin:0;padding:0}body{background:#070a0e;font-family:'DM Sans',sans-serif}::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:#0d1017}::-webkit-scrollbar-thumb{background:#2a3040;border-radius:2px}.mono{font-family:'JetBrains Mono',monospace}.raj{font-family:'Rajdhani',sans-serif}.fade{animation:fIn .22s ease}@keyframes fIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}input,select,textarea{outline:none;font-family:'DM Sans',sans-serif}button{cursor:pointer;font-family:'DM Sans',sans-serif}table{border-collapse:collapse;width:100%}.pg-btn{padding:5px 12px;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid #1c2232;background:transparent;color:#7a8aaa;transition:all .15s}.pg-btn:hover{border-color:#f59e0b;color:#f59e0b}.pg-btn.active{background:#f59e0b22;border-color:#f59e0b;color:#f59e0b}`;
+  s.textContent = `*{box-sizing:border-box;margin:0;padding:0}body{background:#f4f9ff;color:#17324d;font-family:'DM Sans',sans-serif}::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:#eff7fd}::-webkit-scrollbar-thumb{background:#b9d7ee;border-radius:3px}.mono{font-family:'JetBrains Mono',monospace}.raj{font-family:'Rajdhani',sans-serif}.fade{animation:fIn .22s ease}@keyframes fIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}input,select,textarea{outline:none;font-family:'DM Sans',sans-serif}button{cursor:pointer;font-family:'DM Sans',sans-serif}table{border-collapse:collapse;width:100%}.pg-btn{padding:5px 12px;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid #cfe0ef;background:#fff;color:#46617a;transition:all .15s}.pg-btn:hover{border-color:#0b75c9;color:#0b75c9}.pg-btn.active{background:#e5f2fc;border-color:#0b75c9;color:#0b75c9}@media(max-width:720px){.fade [style*='grid-template-columns']{grid-template-columns:1fr!important}.fade h2{font-size:22px!important}.fade h3{font-size:17px!important}.fade input,.fade select{min-height:40px}.fade table{font-size:12px}}`;
   document.head.appendChild(s);
 })();
 
 // ── THEME ──────────────────────────────────────────────────────────────────
 const T = {
-  bg:"#070a0e",surface:"#0d1017",card:"#111520",border:"#1c2232",borderH:"#2a3548",
-  amber:"#f59e0b",green:"#22c55e",red:"#ef4444",blue:"#3b82f6",purple:"#a78bfa",cyan:"#06b6d4",
-  text:"#dde4f0",textSec:"#7a8aaa",textMuted:"#3d4a5c",
-  chart:["#f59e0b","#22c55e","#3b82f6","#a78bfa","#ef4444","#06b6d4"],
+  bg:"#f4f9ff",surface:"#ffffff",card:"#ffffff",border:"#d8e7f3",borderH:"#b9d7ee",
+  amber:"#0b75c9",green:"#168a58",red:"#d64545",blue:"#2878b8",purple:"#7057c7",cyan:"#0a91a6",
+  text:"#17324d",textSec:"#58718a",textMuted:"#8aa0b3",
+  chart:["#0b75c9","#168a58","#2878b8","#7057c7","#d64545","#0a91a6"],
 };
 
 const BrandLogo = ({ height = 34, wide = false }) => (
@@ -145,6 +147,13 @@ const buildSeed = () => ({
   stockLogs: [],
   clients: [],
   notifications: [],
+  employees: [],
+  attendance: [],
+  employeeAdvances: [],
+  salaryPayments: [],
+  businesses: [{id:"default",name:"Main Business",active:true}],
+  clientBills: [],
+  clientDocuments: [],
 });
 
 // ── STORAGE (Supabase + local fallback) ───────────────────────────
@@ -269,6 +278,13 @@ const buildSyncFingerprint = (state) => JSON.stringify({
   notifications: (state?.notifications || [])
     .map((item) => `${item.id}|${item.read ? 1 : 0}|${item.orderId || ""}`)
     .sort(),
+  employees: (state?.employees || []).map((item) => `${item.id}|${item.active === false ? 0 : 1}|${item.monthlySalary || 0}`).sort(),
+  attendance: (state?.attendance || []).map((item) => `${item.employeeId}|${item.date}|${item.status}`).sort(),
+  employeeAdvances: (state?.employeeAdvances || []).map((item) => `${item.id}|${item.amount || 0}|${item.date}`).sort(),
+  salaryPayments: (state?.salaryPayments || []).map((item) => `${item.id}|${item.amount || 0}|${item.date}`).sort(),
+  businesses: (state?.businesses || []).map((item) => `${item.id}|${item.name}|${item.active === false ? 0 : 1}`).sort(),
+  clientBills: (state?.clientBills || []).map((item) => `${item.id}|${item.clientId}|${item.billedAmount || 0}|${item.paidAmount || 0}`).sort(),
+  clientDocuments: (state?.clientDocuments || []).map((item) => `${item.id}|${item.clientId}|${item.name}|${item.size || 0}|${item.deleted ? 1 : 0}`).sort(),
   inventory: Object.entries(state?.inventory || {})
     .map(([key, value]) => `${key}|${Number(value || 0)}`)
     .sort(),
@@ -807,7 +823,7 @@ const DueChip = ({date})=>{
 // ── LOGIN SCREEN ───────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
 const LoginScreen = ({onLogin, canInstall=false, onInstall, showIosHint=false, isInstalled=false})=>{
-  const [step,setStep]   = useState(null); // null | "admin" | "employee" | "client"
+  const [step,setStep]   = useState(null); // null | "admin" | "employee"
   const [pass,setPass]   = useState("");
   const [error,setError] = useState("");
   const [show,setShow]   = useState(false);
@@ -820,8 +836,6 @@ const LoginScreen = ({onLogin, canInstall=false, onInstall, showIosHint=false, i
     } else if(step==="employee"){
       if(String(pass ?? "").trim()===EMPLOYEE_PIN){ onLogin("employee"); }
       else { setError("Incorrect PIN."); setPass(""); }
-    } else if(step==="client"){
-      onLogin("client");
     }
   },[step,pass,onLogin]);
 
@@ -829,7 +843,6 @@ const LoginScreen = ({onLogin, canInstall=false, onInstall, showIosHint=false, i
   const loginRoles = [
     {r:"admin", label:"Admin / Owner", sub:"Full access - sizes, pricing, payments", icon:"[A]", color:T.amber},
     {r:"employee", label:"Employee", sub:"Production queue, orders & stock management", icon:"[E]", color:T.blue},
-    {r:"client", label:"Client Portal", sub:"Browse catalog, place orders, track delivery", icon:"[C]", color:T.green},
   ];
 
   if(!step) return(
@@ -848,7 +861,7 @@ const LoginScreen = ({onLogin, canInstall=false, onInstall, showIosHint=false, i
             {r:"admin",   label:"Admin / Owner",  sub:"Full access — sizes, pricing, payments",         icon:"👑",color:T.amber},
             {r:"employee",label:"Employee",        sub:"Production queue, orders & stock management",    icon:"🔧",color:T.blue},
             {r:"client",  label:"Client Portal",   sub:"Browse catalog, place orders, track delivery",   icon:"🏭",color:T.green},
-          ].map(({r,label,sub,icon,color})=>(
+          ].filter(({r})=>r!=="client").map(({r,label,sub,icon,color})=>(
             <button key={r} onClick={()=>{setStep(r);setPass("");setError("");}} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"18px 20px",cursor:"pointer",textAlign:"left",transition:"border-color .2s,background .2s",display:"flex",gap:14,alignItems:"center"}}
               onMouseEnter={e=>{e.currentTarget.style.borderColor=color;e.currentTarget.style.background=`${color}08`;}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.card;}}>
@@ -865,9 +878,6 @@ const LoginScreen = ({onLogin, canInstall=false, onInstall, showIosHint=false, i
       </div>
     </div>
   );
-
-  // client needs no password
-  if(step==="client"){ onLogin("client"); return null; }
 
   return(
     <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -2781,9 +2791,11 @@ export default function App() {
   const [deferredPrompt,setDeferredPrompt]=useState(null);
   const [isInstalled,setIsInstalled]=useState(false);
   const [installDismissed,setInstallDismissed]=useState(false);
+  const [mobileNavOpen,setMobileNavOpen]=useState(false);
   const dataRef = useRef(null);
   const syncPromiseRef = useRef(null);
   const realtimeRefreshTimeoutRef = useRef(null);
+  const isMobileApp = useIsMobile(900);
 
   const isIos = typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isStandalone =
@@ -3051,6 +3063,8 @@ export default function App() {
     clients:   <Clients    data={data} setData={setData}/>,
     sizes:     <SizeManager data={data} setData={setData}/>,
     reports:   <Reports    data={data} setData={setData}/>,
+    employees: <EmployeeManagement data={data} setData={setData}/>,
+    documents: <DocumentsBilling data={data} setData={setData}/>,
   };
   const displayNav = [
     {id:"dashboard", label:"Dashboard",      icon:"*"},
@@ -3061,12 +3075,16 @@ export default function App() {
     {id:"clients",   label:"Clients",        icon:"[CL]"},
     {id:"sizes",     label:"Sizes & Pricing",icon:"[SZ]"},
     {id:"reports",   label:"Reports",        icon:"[RPT]"},
+    {id:"employees", label:"People & Payroll",icon:"[HR]"},
+    {id:"documents", label:"Documents & Billing",icon:"[DOC]"},
   ];
 
   return(
     <>
-    <div style={{display:"flex",height:"100vh",background:T.bg,overflow:"hidden"}}>
-      <div style={{width:224,background:T.surface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",flexShrink:0}}>
+    <div style={{display:"flex",height:isMobileApp?"100dvh":"100vh",background:T.bg,overflow:"hidden"}}>
+      {isMobileApp&&<button aria-label="Open navigation menu" onClick={()=>setMobileNavOpen(true)} style={{position:"fixed",top:12,left:12,zIndex:20,width:44,height:44,borderRadius:10,border:`1px solid ${T.border}`,background:T.surface,color:T.text,boxShadow:"0 4px 16px rgba(23,50,77,.16)",fontSize:24,lineHeight:1,cursor:"pointer"}}>☰</button>}
+      {isMobileApp&&mobileNavOpen&&<div onClick={()=>setMobileNavOpen(false)} style={{position:"fixed",inset:0,zIndex:30,background:"rgba(15,39,61,.35)",backdropFilter:"blur(2px)"}}/>}
+      <div style={{width:224,background:T.surface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",flexShrink:0,...(isMobileApp?{position:"fixed",left:0,top:0,bottom:0,zIndex:40,boxShadow:"6px 0 24px rgba(23,50,77,.18)",transform:mobileNavOpen?"translateX(0)":"translateX(-105%)",transition:"transform .2s ease"}:{})}}>
         <div style={{padding:"18px 18px",borderBottom:`1px solid ${T.border}`}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
             <BrandLogo height={34} wide />
@@ -3082,7 +3100,7 @@ export default function App() {
         </div>
         <nav style={{flex:1,padding:"10px 10px",overflowY:"auto"}}>
           {displayNav.map(n=>(
-            <button key={n.id} onClick={()=>setPage(n.id)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 12px",borderRadius:7,border:"none",background:page===n.id?`${T.amber}14`:"transparent",color:page===n.id?T.amber:T.textSec,cursor:"pointer",textAlign:"left",fontSize:13,fontWeight:page===n.id?600:400,transition:"all .15s",marginBottom:2}}>
+            <button key={n.id} onClick={()=>{setPage(n.id);setMobileNavOpen(false);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 12px",minHeight:42,borderRadius:7,border:"none",background:page===n.id?`${T.amber}14`:"transparent",color:page===n.id?T.amber:T.textSec,cursor:"pointer",textAlign:"left",fontSize:13,fontWeight:page===n.id?600:400,transition:"all .15s",marginBottom:2}}>
               <span style={{fontSize:10,minWidth:40,padding:"3px 6px",borderRadius:999,border:`1px solid ${page===n.id?`${T.amber}40`:T.border}`,background:page===n.id?`${T.amber}18`:"transparent",color:page===n.id?T.amber:T.textMuted,fontFamily:"'JetBrains Mono', monospace",textAlign:"center",letterSpacing:.3,flexShrink:0}}>{n.icon}</span>
               {n.label}
               {n.id==="orders"&&pendingCnt>0&&<span style={{marginLeft:"auto",background:T.red,color:"#fff",fontSize:10,fontWeight:700,borderRadius:20,padding:"1px 6px"}}>{pendingCnt}</span>}
@@ -3094,7 +3112,7 @@ export default function App() {
           <Btn variant="ghost" onClick={()=>setRole(null)} style={{width:"100%",fontSize:12}}>← Logout</Btn>
         </div>
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:"24px"}}>
+      <div style={{flex:1,overflowY:"auto",padding:isMobileApp?"70px 14px 20px":"24px",minWidth:0}}>
         <NotificationPanel role={NOTIF_ADMIN} data={data} setData={setData} title="Admin Notifications" />
         {PAGES[page]}
       </div>

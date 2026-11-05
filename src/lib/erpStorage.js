@@ -22,6 +22,13 @@ const createEmptyState = () => ({
   stockLogs: [],
   clients: [],
   notifications: [],
+  employees: [],
+  attendance: [],
+  employeeAdvances: [],
+  salaryPayments: [],
+  businesses: [{ id: "default", name: "Main Business", active: true }],
+  clientBills: [],
+  clientDocuments: [],
   _erpMeta: { localUpdatedAt: 0, serverUpdatedAt: 0, dirty: false },
 });
 
@@ -84,6 +91,13 @@ const mergeErpState = (current = {}, incoming = {}) => ({
   stockLogs: mergeById(current.stockLogs, incoming.stockLogs),
   clients: mergeById(current.clients, incoming.clients),
   notifications: mergeById(current.notifications, incoming.notifications),
+  employees: mergeById(current.employees, incoming.employees),
+  attendance: mergeById(current.attendance, incoming.attendance),
+  employeeAdvances: mergeById(current.employeeAdvances, incoming.employeeAdvances),
+  salaryPayments: mergeById(current.salaryPayments, incoming.salaryPayments),
+  businesses: mergeById(current.businesses, incoming.businesses),
+  clientBills: mergeById(current.clientBills, incoming.clientBills),
+  clientDocuments: mergeById(current.clientDocuments, incoming.clientDocuments),
   _erpMeta:
     incoming._erpMeta && typeof incoming._erpMeta === "object"
       ? incoming._erpMeta
@@ -171,6 +185,13 @@ const sanitizeErpData = (data, buildSeed) => {
     stockLogs: Array.isArray(cleaned.stockLogs) ? cleaned.stockLogs : fallback.stockLogs,
     clients: Array.isArray(cleaned.clients) ? cleaned.clients : fallback.clients,
     notifications: Array.isArray(cleaned.notifications) ? cleaned.notifications : fallback.notifications,
+    employees: Array.isArray(cleaned.employees) ? cleaned.employees : fallback.employees,
+    attendance: Array.isArray(cleaned.attendance) ? cleaned.attendance : fallback.attendance,
+    employeeAdvances: Array.isArray(cleaned.employeeAdvances) ? cleaned.employeeAdvances : fallback.employeeAdvances,
+    salaryPayments: Array.isArray(cleaned.salaryPayments) ? cleaned.salaryPayments : fallback.salaryPayments,
+    businesses: Array.isArray(cleaned.businesses) && cleaned.businesses.length > 0 ? cleaned.businesses : fallback.businesses,
+    clientBills: Array.isArray(cleaned.clientBills) ? cleaned.clientBills : fallback.clientBills,
+    clientDocuments: Array.isArray(cleaned.clientDocuments) ? cleaned.clientDocuments : fallback.clientDocuments,
     _erpMeta: {
       ...(cleaned._erpMeta && typeof cleaned._erpMeta === "object" ? cleaned._erpMeta : {}),
       localUpdatedAt: getLocalUpdatedAt(cleaned),

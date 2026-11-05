@@ -27,6 +27,13 @@ const mergeErpState = (current = {}, incoming = {}) => ({
   stockLogs: Array.isArray(incoming.stockLogs) ? incoming.stockLogs : mergeById(current.stockLogs, incoming.stockLogs),
   clients: Array.isArray(incoming.clients) ? incoming.clients : mergeById(current.clients, incoming.clients),
   notifications: Array.isArray(incoming.notifications) ? incoming.notifications : mergeById(current.notifications, incoming.notifications),
+  employees: mergeById(current.employees, incoming.employees),
+  attendance: mergeById(current.attendance, incoming.attendance),
+  employeeAdvances: mergeById(current.employeeAdvances, incoming.employeeAdvances),
+  salaryPayments: mergeById(current.salaryPayments, incoming.salaryPayments),
+  businesses: mergeById(current.businesses, incoming.businesses),
+  clientBills: mergeById(current.clientBills, incoming.clientBills),
+  clientDocuments: mergeById(current.clientDocuments, incoming.clientDocuments),
   _erpMeta:
     incoming._erpMeta && typeof incoming._erpMeta === "object"
       ? incoming._erpMeta
