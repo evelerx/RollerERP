@@ -16,6 +16,10 @@ export const getPool = () => {
   if (!poolInstance) {
     poolInstance = new Pool({
       connectionString: databaseUrl,
+      // Vercel functions are short-lived; let Supabase's transaction pooler
+      // manage concurrency instead of opening a large pool per function.
+      max: 1,
+      idleTimeoutMillis: 10_000,
       ssl: {
         rejectUnauthorized: false,
       },
