@@ -20,6 +20,7 @@ export const getPool = () => {
       // manage concurrency instead of opening a large pool per function.
       max: 1,
       idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 10_000,
       ssl: {
         rejectUnauthorized: false,
       },
