@@ -1344,16 +1344,32 @@ const StockManager = memo(({data,setData,role})=>{
   const isAdmin=role==="admin";
   const [opModal,setOpModal]=useState(false);
   const [opForm,setOpForm]=useState({type:"add",size:(data.sizes||[])[0]?.code||"",qty:0,note:"",orderId:""});
+  const [opError,setOpError]=useState("");
   const [logFilter,setLogFilter]=useState("all");
   const dSearch=useDebounce(logFilter,200);
 
   const activeSizes=useMemo(()=>(data.sizes||[]).filter(s=>s.active!==false),[data.sizes]);
   const pendingOrders=useMemo(()=>data.orders.filter(o=>["pending","in-production","ready-for-delivery"].includes(o.status)),[data.orders]);
+  const currentQty=Number(data.inventory?.[opForm.size]||0);
+  const selectedOrder=useMemo(()=>pendingOrders.find(order=>order.id===opForm.orderId),[pendingOrders,opForm.orderId]);
+  const orderedQty=useMemo(()=>selectedOrder?.items?.filter(item=>item.size===opForm.size).reduce((sum,item)=>sum+Number(item.qty||0),0)||0,[selectedOrder,opForm.size]);
+  const allocatedQty=useMemo(()=>(data.stockLogs||[]).filter(log=>log.type==="transfer"&&log.orderId===opForm.orderId&&log.size===opForm.size).reduce((sum,log)=>sum+Number(log.qty||0),0),[data.stockLogs,opForm.orderId,opForm.size]);
+  const remainingForOrder=Math.max(0,orderedQty-allocatedQty);
 
   const applyOp=useCallback(()=>{
     const {type,size,qty,note,orderId}=opForm;
     const n=Number(qty);
-    if(!n||n<=0)return;
+    const current=Number(data.inventory?.[size]||0);
+    if(!n||n<=0){setOpError("Enter a quantity greater than zero.");return;}
+    if(type!=="add"&&n>current){setOpError(`Only ${current} pcs are available for this operation.`);return;}
+    if(type==="transfer"){
+      const order=data.orders.find(item=>item.id===orderId);
+      const required=order?.items?.filter(item=>item.size===size).reduce((sum,item)=>sum+Number(item.qty||0),0)||0;
+      const allocated=(data.stockLogs||[]).filter(log=>log.type==="transfer"&&log.orderId===orderId&&log.size===size).reduce((sum,log)=>sum+Number(log.qty||0),0);
+      if(!orderId||!order){setOpError("Choose an active order before transferring stock.");return;}
+      if(!required){setOpError("The selected order does not contain this roller size.");return;}
+      if(n>required-allocated){setOpError(`Only ${Math.max(0,required-allocated)} pcs remain to be allocated to this order.`);return;}
+    }
     setData(prev=>{
       let inv={...prev.inventory};
       const cur=inv[size]||0;
@@ -1374,8 +1390,9 @@ const StockManager = memo(({data,setData,role})=>{
       saveData(u);return u;
     });
     setOpModal(false);
+    setOpError("");
     setOpForm({type:"add",size:activeSizes[0]?.code||"",qty:0,note:"",orderId:""});
-  },[opForm,activeSizes,setData]);
+  },[opForm,activeSizes,data,setData]);
 
   const logs=useMemo(()=>{
     const all=(data.stockLogs||[]);
@@ -1405,7 +1422,7 @@ const StockManager = memo(({data,setData,role})=>{
   return(
     <div className="fade">
       <SectionHeader title="Stock Management" subtitle="Add, reduce or transfer finished goods inventory">
-        <Btn onClick={()=>{setOpForm({type:"add",size:activeSizes[0]?.code||"",qty:0,note:"",orderId:""});setOpModal(true);}}>⊕ Stock Operation</Btn>
+        <Btn onClick={()=>{setOpError("");setOpForm({type:"add",size:activeSizes[0]?.code||"",qty:0,note:"",orderId:""});setOpModal(true);}}>⊕ Stock Operation</Btn>
       </SectionHeader>
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:24}}>
@@ -1428,7 +1445,7 @@ const StockManager = memo(({data,setData,role})=>{
           const color=qty===0?T.red:qty<10?T.amber:T.green;
           const pct=Math.min(100,Math.round(qty/50*100));
           return(
-            <Card key={sz.code} onClick={()=>{setOpForm({type:"add",size:sz.code,qty:0,note:"",orderId:""});setOpModal(true);}} style={{cursor:"pointer"}}>
+            <Card key={sz.code} onClick={()=>{setOpError("");setOpForm({type:"add",size:sz.code,qty:0,note:"",orderId:""});setOpModal(true);}} style={{cursor:"pointer"}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
                 <div>
                   <div className="raj" style={{fontSize:15,fontWeight:700,color:T.text}}>{sz.label}</div>
@@ -1467,7 +1484,7 @@ const StockManager = memo(({data,setData,role})=>{
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
             {[{v:"add",l:"➕ Add Stock",c:T.green},{v:"reduce",l:"➖ Reduce",c:T.red},{v:"transfer",l:"🔄 Transfer to Order",c:T.blue}].map(({v,l,c})=>(
-              <button key={v} onClick={()=>setOpForm(f=>({...f,type:v}))} style={{padding:"10px",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",border:`2px solid ${opForm.type===v?c:T.border}`,background:opForm.type===v?`${c}12`:"transparent",color:opForm.type===v?c:T.textSec,textAlign:"center"}}>
+              <button key={v} onClick={()=>{setOpError("");setOpForm(f=>({...f,type:v}));}} style={{padding:"10px",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",border:`2px solid ${opForm.type===v?c:T.border}`,background:opForm.type===v?`${c}12`:"transparent",color:opForm.type===v?c:T.textSec,textAlign:"center"}}>
                 {l}
               </button>
             ))}
@@ -1481,15 +1498,19 @@ const StockManager = memo(({data,setData,role})=>{
 
           <div style={{background:T.surface,borderRadius:6,padding:"10px 14px",display:"flex",justifyContent:"space-between"}}>
             <span style={{color:T.textSec,fontSize:13}}>Current stock for selected size</span>
-            <span className="mono" style={{color:T.amber,fontWeight:700}}>{data.inventory[opForm.size]||0} pcs</span>
+            <span className="mono" style={{color:T.amber,fontWeight:700}}>{currentQty} pcs</span>
           </div>
 
           <Inp label="Quantity" type="number" value={opForm.qty} onChange={v=>setOpForm(f=>({...f,qty:v}))} min="1"/>
 
           {opForm.type==="transfer"&&(
             <Inp label="Transfer to Order" value={opForm.orderId} onChange={v=>setOpForm(f=>({...f,orderId:v}))}
-              options={[{value:"",label:"— Select Order —"},...pendingOrders.map(o=>({value:o.id,label:`${o.id} — ${o.clientName} (${o.items.reduce((s,i)=>s+i.qty,0)} pcs)`}))]}/>
+              options={[{value:"",label:"— Select Order —"},...pendingOrders.map(o=>({value:o.id,label:`${o.id} — ${o.clientName} (${o.items.reduce((s,i)=>s+Number(i.qty||0),0)} pcs)`}))]}/>
           )}
+
+          {opForm.type==="transfer"&&selectedOrder&&<div style={{background:T.surface,borderRadius:6,padding:"10px 14px",fontSize:12,color:T.textSec}}>This order needs <b style={{color:T.text}}>{orderedQty}</b> pcs of this size; <b style={{color:T.blue}}>{remainingForOrder}</b> pcs are still available to allocate.</div>}
+
+          {opError&&<div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.25)",borderRadius:6,padding:"9px 12px",fontSize:12,color:T.red}}>{opError}</div>}
 
           <Inp label="Note / Reason" value={opForm.note} onChange={v=>setOpForm(f=>({...f,note:v}))} placeholder="Optional: reason for this operation"/>
 
@@ -1497,14 +1518,14 @@ const StockManager = memo(({data,setData,role})=>{
             <div style={{background:T.surface,borderRadius:6,padding:"10px 14px",display:"flex",justifyContent:"space-between"}}>
               <span style={{color:T.textSec,fontSize:13}}>After operation</span>
               <span className="mono" style={{fontWeight:700,fontSize:16,color:opForm.type==="add"?T.green:T.red}}>
-                {opForm.type==="add"?(data.inventory[opForm.size]||0)+Number(opForm.qty):Math.max(0,(data.inventory[opForm.size]||0)-Number(opForm.qty))} pcs
+                {opForm.type==="add"?currentQty+Number(opForm.qty):Math.max(0,currentQty-Number(opForm.qty))} pcs
               </span>
             </div>
           )}
 
           <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
             <Btn variant="ghost" onClick={()=>setOpModal(false)}>Cancel</Btn>
-            <Btn onClick={applyOp} disabled={!opForm.size||!opForm.qty||Number(opForm.qty)<=0} variant={opForm.type==="add"?"success":opForm.type==="reduce"?"danger":"blue"}>
+            <Btn onClick={applyOp} disabled={!opForm.size||!opForm.qty||Number(opForm.qty)<=0||(opForm.type==="transfer"&&!opForm.orderId)} variant={opForm.type==="add"?"success":opForm.type==="reduce"?"danger":"blue"}>
               Confirm {opForm.type==="add"?"Addition":opForm.type==="reduce"?"Reduction":"Transfer"}
             </Btn>
           </div>
